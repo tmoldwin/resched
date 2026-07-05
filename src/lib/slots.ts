@@ -1,7 +1,8 @@
 export type DayColumn = {
   date: string;
   label: string;
-  shortLabel: string;
+  dayNumber: number;
+  weekdayShort: string;
 };
 
 export type SlotGridMeta = {
@@ -69,9 +70,9 @@ export function enumerateDays(startDate: string, endDate: string): DayColumn[] {
         month: "short",
         day: "numeric",
       }),
-      shortLabel: current.toLocaleDateString(undefined, {
+      dayNumber: current.getDate(),
+      weekdayShort: current.toLocaleDateString(undefined, {
         weekday: "short",
-        day: "numeric",
       }),
     });
   }

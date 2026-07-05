@@ -462,11 +462,13 @@ export default function AvailabilityGrid({
             {grid.days.map((day) => (
               <div
                 key={day.date}
-                className="border-r border-zinc-300 px-0.5 py-2 text-center text-[10px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
+                className="border-r border-zinc-300 px-0.5 py-1.5 text-center leading-tight text-zinc-700 last:border-r-0"
               >
-                <div className="whitespace-normal break-words">{day.shortLabel}</div>
-                <div className="hidden whitespace-normal break-words text-[10px] font-normal leading-tight text-zinc-500 sm:block">
-                  {day.label}
+                <div className="text-xs font-semibold tabular-nums sm:text-sm">
+                  {day.dayNumber}
+                </div>
+                <div className="text-[10px] font-normal text-zinc-500 sm:text-[11px]">
+                  {day.weekdayShort}
                 </div>
               </div>
             ))}
