@@ -37,6 +37,8 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
+const SCROLL_GUTTER_CLASS =
+  "w-16 shrink-0 touch-pan-x touch-pan-y bg-zinc-100 sm:w-10";
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
@@ -78,7 +80,7 @@ function indicesInRectangle(
 }
 
 function gridColumns(dayCount: number) {
-  return `${TIME_COLUMN} repeat(${dayCount}, minmax(2.25rem, 1fr))`;
+  return `${TIME_COLUMN} repeat(${dayCount}, minmax(2.75rem, 1fr))`;
 }
 
 function cellColors(
@@ -418,7 +420,7 @@ export default function AvailabilityGrid({
         <p className="text-sm text-zinc-500">
           {mode === "edit"
             ? hasName
-              ? `Drag day cells to select · swipe the time column to scroll · ${selectedCount} slots`
+              ? `Drag to select · swipe side margins or date headers to scroll · ${selectedCount} slots`
               : "Enter your name above to mark your availability"
             : contributorCount > 0
               ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
@@ -443,30 +445,35 @@ export default function AvailabilityGrid({
 
         <div
           ref={gridRef}
-          className={`max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white sm:max-h-none ${
+          className={`flex max-h-[min(70vh,32rem)] overflow-auto overscroll-contain rounded-lg border border-zinc-200 bg-white sm:max-h-none ${
             canPaint ? "select-none" : ""
           } ${!hasName && mode === "edit" ? "opacity-50" : ""}`}
         >
-        <div className="min-w-max">
           <div
-            className="sticky top-0 z-20 grid border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
-            style={{ gridTemplateColumns: columnTemplate }}
-          >
-            <div className="sticky left-0 z-30 touch-pan-y border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-              Time
-            </div>
-            {grid.days.map((day) => (
-              <div
-                key={day.date}
-                className="touch-pan-x touch-pan-y border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
-              >
-                <div className="truncate">{day.shortLabel}</div>
-                <div className="hidden truncate text-[10px] font-normal text-zinc-500 sm:block">
-                  {day.label}
-                </div>
+            className={`sticky left-0 z-40 self-stretch ${SCROLL_GUTTER_CLASS}`}
+            aria-hidden
+          />
+
+          <div className="min-w-max flex-1">
+            <div
+              className="sticky top-0 z-20 grid border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
+              style={{ gridTemplateColumns: columnTemplate }}
+            >
+              <div className="sticky left-0 z-30 border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                Time
               </div>
-            ))}
-          </div>
+              {grid.days.map((day) => (
+                <div
+                  key={day.date}
+                  className="touch-pan-x touch-pan-y border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
+                >
+                  <div className="truncate">{day.shortLabel}</div>
+                  <div className="hidden truncate text-[10px] font-normal text-zinc-500 sm:block">
+                    {day.label}
+                  </div>
+                </div>
+              ))}
+            </div>
 
           {Array.from({ length: grid.slotsPerDay }, (_, slotInDay) => {
             const startMinutes = slotStartMinutes(
@@ -484,7 +491,7 @@ export default function AvailabilityGrid({
               style={{ gridTemplateColumns: columnTemplate }}
             >
               <div
-                className="sticky left-0 z-10 flex h-7 touch-pan-y items-center justify-end border-r border-zinc-300 bg-zinc-50 px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:bg-white sm:text-[11px]"
+                className="sticky left-0 z-10 flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
                 style={{ borderTop: `1px solid ${lineColor}` }}
               >
                 {timeLabel}
@@ -536,8 +543,13 @@ export default function AvailabilityGrid({
             </div>
             );
           })}
+          </div>
+
+          <div
+            className={`sticky right-0 z-40 self-stretch ${SCROLL_GUTTER_CLASS}`}
+            aria-hidden
+          />
         </div>
-      </div>
       </div>
 
       {mode === "edit" && hasName ? (
