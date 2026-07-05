@@ -37,8 +37,8 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
-const SCROLL_GUTTER_CLASS =
-  "w-16 shrink-0 touch-pan-x touch-pan-y bg-zinc-100 sm:w-10";
+const SCROLL_MARGIN_CLASS =
+  "sticky z-40 w-16 shrink-0 touch-pan-x touch-pan-y self-stretch sm:w-10";
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
@@ -420,7 +420,7 @@ export default function AvailabilityGrid({
         <p className="text-sm text-zinc-500">
           {mode === "edit"
             ? hasName
-              ? `Drag to select · swipe side margins or date headers to scroll · ${selectedCount} slots`
+              ? `Drag to select · swipe beside the grid or date headers to scroll · ${selectedCount} slots`
               : "Enter your name above to mark your availability"
             : contributorCount > 0
               ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
@@ -434,27 +434,28 @@ export default function AvailabilityGrid({
         </p>
       ) : null}
 
-      <div className="relative">
-        {!hasName && mode === "edit" ? (
-          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-zinc-100/80 backdrop-blur-[1px]">
-            <p className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 shadow-sm">
-              Enter your name
-            </p>
-          </div>
-        ) : null}
-
+      <div>
         <div
           ref={gridRef}
-          className={`flex max-h-[min(70vh,32rem)] overflow-auto overscroll-contain rounded-lg border border-zinc-200 bg-white sm:max-h-none ${
+          className={`flex max-h-[min(70vh,32rem)] overflow-auto overscroll-contain sm:max-h-none ${
             canPaint ? "select-none" : ""
-          } ${!hasName && mode === "edit" ? "opacity-50" : ""}`}
+          }`}
         >
-          <div
-            className={`sticky left-0 z-40 self-stretch ${SCROLL_GUTTER_CLASS}`}
-            aria-hidden
-          />
+          <div className={`left-0 ${SCROLL_MARGIN_CLASS}`} aria-hidden />
 
-          <div className="min-w-max flex-1">
+          <div
+            className={`relative min-w-max rounded-lg border border-zinc-200 bg-white ${
+              !hasName && mode === "edit" ? "opacity-50" : ""
+            }`}
+          >
+            {!hasName && mode === "edit" ? (
+              <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-zinc-100/80 backdrop-blur-[1px]">
+                <p className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 shadow-sm">
+                  Enter your name
+                </p>
+              </div>
+            ) : null}
+
             <div
               className="sticky top-0 z-20 grid border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
               style={{ gridTemplateColumns: columnTemplate }}
@@ -545,10 +546,7 @@ export default function AvailabilityGrid({
           })}
           </div>
 
-          <div
-            className={`sticky right-0 z-40 self-stretch ${SCROLL_GUTTER_CLASS}`}
-            aria-hidden
-          />
+          <div className={`right-0 ${SCROLL_MARGIN_CLASS}`} aria-hidden />
         </div>
       </div>
 
