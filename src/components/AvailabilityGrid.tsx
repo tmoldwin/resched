@@ -37,8 +37,7 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
-const SCROLL_MARGIN_CLASS =
-  "sticky z-40 w-16 shrink-0 touch-pan-x touch-pan-y self-stretch sm:w-10";
+const SCROLL_MARGIN_CLASS = "w-16 shrink-0 self-stretch touch-pan-y sm:w-8";
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
@@ -80,7 +79,7 @@ function indicesInRectangle(
 }
 
 function gridColumns(dayCount: number) {
-  return `${TIME_COLUMN} repeat(${dayCount}, minmax(2.75rem, 1fr))`;
+  return `${TIME_COLUMN} repeat(${dayCount}, minmax(0, 1fr))`;
 }
 
 function cellColors(
@@ -420,7 +419,7 @@ export default function AvailabilityGrid({
         <p className="text-sm text-zinc-500">
           {mode === "edit"
             ? hasName
-              ? `Drag to select · swipe beside the grid or date headers to scroll · ${selectedCount} slots`
+              ? `Drag to select · swipe side margins to scroll · ${selectedCount} slots`
               : "Enter your name above to mark your availability"
             : contributorCount > 0
               ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
@@ -434,47 +433,44 @@ export default function AvailabilityGrid({
         </p>
       ) : null}
 
-      <div>
+      <div
+        className={`-mx-4 flex w-full items-stretch sm:mx-0 ${canPaint ? "select-none" : ""}`}
+      >
+        <div className={SCROLL_MARGIN_CLASS} aria-hidden />
+
         <div
           ref={gridRef}
-          className={`flex max-h-[min(70vh,32rem)] overflow-auto overscroll-contain sm:max-h-none ${
-            canPaint ? "select-none" : ""
+          className={`relative min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white ${
+            !hasName && mode === "edit" ? "opacity-50" : ""
           }`}
         >
-          <div className={`left-0 ${SCROLL_MARGIN_CLASS}`} aria-hidden />
+          {!hasName && mode === "edit" ? (
+            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-zinc-100/80 backdrop-blur-[1px]">
+              <p className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 shadow-sm">
+                Enter your name
+              </p>
+            </div>
+          ) : null}
 
           <div
-            className={`relative min-w-max rounded-lg border border-zinc-200 bg-white ${
-              !hasName && mode === "edit" ? "opacity-50" : ""
-            }`}
+            className="sticky top-0 z-20 grid w-full border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
+            style={{ gridTemplateColumns: columnTemplate }}
           >
-            {!hasName && mode === "edit" ? (
-              <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-zinc-100/80 backdrop-blur-[1px]">
-                <p className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 shadow-sm">
-                  Enter your name
-                </p>
-              </div>
-            ) : null}
-
-            <div
-              className="sticky top-0 z-20 grid border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
-              style={{ gridTemplateColumns: columnTemplate }}
-            >
-              <div className="sticky left-0 z-30 border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-                Time
-              </div>
-              {grid.days.map((day) => (
-                <div
-                  key={day.date}
-                  className="touch-pan-x touch-pan-y border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
-                >
-                  <div className="truncate">{day.shortLabel}</div>
-                  <div className="hidden truncate text-[10px] font-normal text-zinc-500 sm:block">
-                    {day.label}
-                  </div>
-                </div>
-              ))}
+            <div className="border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+              Time
             </div>
+            {grid.days.map((day) => (
+              <div
+                key={day.date}
+                className="border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
+              >
+                <div className="truncate">{day.shortLabel}</div>
+                <div className="hidden truncate text-[10px] font-normal text-zinc-500 sm:block">
+                  {day.label}
+                </div>
+              </div>
+            ))}
+          </div>
 
           {Array.from({ length: grid.slotsPerDay }, (_, slotInDay) => {
             const startMinutes = slotStartMinutes(
@@ -488,11 +484,11 @@ export default function AvailabilityGrid({
             return (
             <div
               key={slotInDay}
-              className="grid"
+              className="grid w-full"
               style={{ gridTemplateColumns: columnTemplate }}
             >
               <div
-                className="sticky left-0 z-10 flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
+                className="flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
                 style={{ borderTop: `1px solid ${lineColor}` }}
               >
                 {timeLabel}
@@ -544,14 +540,13 @@ export default function AvailabilityGrid({
             </div>
             );
           })}
-          </div>
-
-          <div className={`right-0 ${SCROLL_MARGIN_CLASS}`} aria-hidden />
         </div>
+
+        <div className={SCROLL_MARGIN_CLASS} aria-hidden />
       </div>
 
       {mode === "edit" && hasName ? (
-        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 border-t border-zinc-200 bg-white/95 px-1 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={saveAvailability}
