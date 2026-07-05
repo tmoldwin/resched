@@ -182,6 +182,7 @@ export default function AvailabilityGrid({
   const snapshotRef = useRef<boolean[]>([]);
   const lastPaintedRef = useRef<number | null>(null);
   const draftSlotsRef = useRef(draftSlots);
+  const touchInteractionRef = useRef(false);
 
   const hasName = Boolean(activeParticipant?.name.trim());
   const canPaint = mode === "edit" && hasName;
@@ -205,8 +206,9 @@ export default function AvailabilityGrid({
       setTooltip(null);
     }
 
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      window.removeEventListener("pointerdown", onPointerDown, true);
   }, [groupFocusIndex, mode]);
 
   useEffect(() => {
@@ -406,21 +408,17 @@ export default function AvailabilityGrid({
   ) {
     if (mode !== "group") return;
 
-    pointerEvent.preventDefault();
-    pointerEvent.stopPropagation();
-    setGroupFocusIndex(index);
-
     if (pointerEvent.pointerType === "touch") {
-      showSlotTooltip(
-        index,
-        pointerEvent.clientX,
-        pointerEvent.clientY,
-        "above",
-      );
-      return;
+      touchInteractionRef.current = true;
+      window.setTimeout(() => {
+        touchInteractionRef.current = false;
+      }, 700);
     }
 
+    pointerEvent.stopPropagation();
+
     const rect = pointerEvent.currentTarget.getBoundingClientRect();
+    setGroupFocusIndex(index);
     showSlotTooltip(
       index,
       rect.left + rect.width / 2,
@@ -608,7 +606,7 @@ export default function AvailabilityGrid({
                   <div
                     key={`${day.date}-${slotInDay}`}
                     role={mode === "group" ? undefined : "button"}
-                    tabIndex={canPaint ? 0 : mode === "group" ? 0 : -1}
+                    tabIndex={canPaint ? 0 : -1}
                     data-slot-index={index}
                     aria-label={`${day.label} ${timeLabel || formatMinutes24(startMinutes)}${
                       mode === "group" && slotNames.length > 0
@@ -625,7 +623,9 @@ export default function AvailabilityGrid({
                       startPainting(index, pointerEvent);
                     }}
                     onMouseEnter={(mouseEvent) => {
-                      if (mode !== "group") return;
+                      if (mode !== "group" || touchInteractionRef.current) {
+                        return;
+                      }
                       setGroupFocusIndex(index);
                       showSlotTooltip(
                         index,
@@ -635,7 +635,9 @@ export default function AvailabilityGrid({
                       );
                     }}
                     onMouseMove={(mouseEvent) => {
-                      if (mode !== "group") return;
+                      if (mode !== "group" || touchInteractionRef.current) {
+                        return;
+                      }
                       showSlotTooltip(
                         index,
                         mouseEvent.clientX,
@@ -644,22 +646,9 @@ export default function AvailabilityGrid({
                       );
                     }}
                     onMouseLeave={() => {
-                      if (mode !== "group") return;
-                      hideSlotTooltip();
-                    }}
-                    onFocus={(focusEvent) => {
-                      if (mode !== "group") return;
-                      setGroupFocusIndex(index);
-                      const rect = focusEvent.currentTarget.getBoundingClientRect();
-                      showSlotTooltip(
-                        index,
-                        rect.left + rect.width / 2,
-                        rect.top,
-                        "above",
-                      );
-                    }}
-                    onBlur={() => {
-                      if (mode !== "group") return;
+                      if (mode !== "group" || touchInteractionRef.current) {
+                        return;
+                      }
                       hideSlotTooltip();
                     }}
                     className={`h-7 border-r sm:h-8 ${
@@ -677,11 +666,7 @@ export default function AvailabilityGrid({
                       borderStyle: "solid",
                       WebkitTapHighlightColor: "transparent",
                       ...(isGroupFocused
-                        ? {
-                            boxShadow: "inset 0 0 0 2px #15803d",
-                            zIndex: 1,
-                            position: "relative" as const,
-                          }
+                        ? { boxShadow: "inset 0 0 0 2px #15803d" }
                         : {}),
                     }}
                   />
