@@ -37,8 +37,6 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
-const LONG_PRESS_MS = 350;
-const SCROLL_CANCEL_PX = 10;
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
@@ -173,13 +171,6 @@ export default function AvailabilityGrid({
   const snapshotRef = useRef<boolean[]>([]);
   const lastPaintedRef = useRef<number | null>(null);
   const draftSlotsRef = useRef(draftSlots);
-  const pendingPointerRef = useRef<{
-    index: number;
-    x: number;
-    y: number;
-    pointerId: number;
-  } | null>(null);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasName = Boolean(activeParticipant?.name.trim());
   const canPaint = mode === "edit" && hasName;
@@ -278,24 +269,14 @@ export default function AvailabilityGrid({
     [grid.slotsPerDay],
   );
 
-  const clearPendingTouch = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    pendingPointerRef.current = null;
-  }, []);
-
   const stopPainting = useCallback(() => {
     paintingRef.current = false;
     paintAnchorRef.current = null;
     lastPaintedRef.current = null;
-    clearPendingTouch();
-  }, [clearPendingTouch]);
+  }, []);
 
   const beginPaint = useCallback(
     (index: number, pointerId: number) => {
-      clearPendingTouch();
       snapshotRef.current = draftSlotsRef.current.slice();
       paintAnchorRef.current = indexToAnchor(index, grid.slotsPerDay);
       paintValueRef.current = !draftSlotsRef.current[index];
@@ -304,48 +285,20 @@ export default function AvailabilityGrid({
       paintRectangle(index);
       gridRef.current?.setPointerCapture(pointerId);
     },
-    [clearPendingTouch, grid.slotsPerDay, paintRectangle],
+    [grid.slotsPerDay, paintRectangle],
   );
-
-  const toggleCell = useCallback((index: number) => {
-    setDraftSlots((current) => {
-      const next = current.slice();
-      next[index] = !next[index];
-      return next;
-    });
-  }, []);
 
   useEffect(() => {
     if (!canPaint) return;
 
     function onPointerMove(event: PointerEvent) {
-      const pending = pendingPointerRef.current;
-
-      if (pending && !paintingRef.current) {
-        const dx = event.clientX - pending.x;
-        const dy = event.clientY - pending.y;
-        if (Math.hypot(dx, dy) > SCROLL_CANCEL_PX) {
-          clearPendingTouch();
-        }
-        return;
-      }
-
       if (!paintingRef.current) return;
       event.preventDefault();
       const index = resolveIndexFromPoint(event.clientX, event.clientY);
       if (index !== null) paintRectangle(index);
     }
 
-    function onPointerEnd(event: PointerEvent) {
-      const pending = pendingPointerRef.current;
-      if (pending && !paintingRef.current) {
-        const dx = event.clientX - pending.x;
-        const dy = event.clientY - pending.y;
-        if (Math.hypot(dx, dy) < SCROLL_CANCEL_PX) {
-          toggleCell(pending.index);
-        }
-        clearPendingTouch();
-      }
+    function onPointerEnd() {
       stopPainting();
     }
 
@@ -354,19 +307,11 @@ export default function AvailabilityGrid({
     window.addEventListener("pointercancel", onPointerEnd);
 
     return () => {
-      clearPendingTouch();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
     };
-  }, [
-    canPaint,
-    clearPendingTouch,
-    paintRectangle,
-    resolveIndexFromPoint,
-    stopPainting,
-    toggleCell,
-  ]);
+  }, [canPaint, paintRectangle, resolveIndexFromPoint, stopPainting]);
 
   function startPainting(
     index: number,
@@ -374,25 +319,8 @@ export default function AvailabilityGrid({
   ) {
     if (!canPaint) return;
 
-    if (pointerEvent.pointerType === "touch") {
-      clearPendingTouch();
-      pendingPointerRef.current = {
-        index,
-        x: pointerEvent.clientX,
-        y: pointerEvent.clientY,
-        pointerId: pointerEvent.pointerId,
-      };
-      longPressTimerRef.current = setTimeout(() => {
-        longPressTimerRef.current = null;
-        const pending = pendingPointerRef.current;
-        if (pending?.index === index) {
-          beginPaint(index, pending.pointerId);
-        }
-      }, LONG_PRESS_MS);
-      return;
-    }
-
     pointerEvent.preventDefault();
+    pointerEvent.stopPropagation();
     beginPaint(index, pointerEvent.pointerId);
   }
 
@@ -490,7 +418,7 @@ export default function AvailabilityGrid({
         <p className="text-sm text-zinc-500">
           {mode === "edit"
             ? hasName
-              ? `Click and drag to select · hold and drag on mobile · ${selectedCount} slots`
+              ? `Drag day cells to select · swipe the time column to scroll · ${selectedCount} slots`
               : "Enter your name above to mark your availability"
             : contributorCount > 0
               ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
@@ -515,7 +443,7 @@ export default function AvailabilityGrid({
 
         <div
           ref={gridRef}
-          className={`overflow-auto rounded-lg border border-zinc-200 bg-white ${
+          className={`max-h-[min(70vh,32rem)] overflow-auto rounded-lg border border-zinc-200 bg-white sm:max-h-none ${
             canPaint ? "select-none" : ""
           } ${!hasName && mode === "edit" ? "opacity-50" : ""}`}
         >
@@ -524,13 +452,13 @@ export default function AvailabilityGrid({
             className="sticky top-0 z-20 grid border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
             style={{ gridTemplateColumns: columnTemplate }}
           >
-            <div className="sticky left-0 z-30 border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            <div className="sticky left-0 z-30 touch-pan-y border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
               Time
             </div>
             {grid.days.map((day) => (
               <div
                 key={day.date}
-                className="border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
+                className="touch-pan-x touch-pan-y border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
               >
                 <div className="truncate">{day.shortLabel}</div>
                 <div className="hidden truncate text-[10px] font-normal text-zinc-500 sm:block">
@@ -556,7 +484,7 @@ export default function AvailabilityGrid({
               style={{ gridTemplateColumns: columnTemplate }}
             >
               <div
-                className="sticky left-0 z-10 flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
+                className="sticky left-0 z-10 flex h-7 touch-pan-y items-center justify-end border-r border-zinc-300 bg-zinc-50 px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:bg-white sm:text-[11px]"
                 style={{ borderTop: `1px solid ${lineColor}` }}
               >
                 {timeLabel}
@@ -593,7 +521,7 @@ export default function AvailabilityGrid({
                     onPointerEnter={() => showTooltip(index)}
                     onPointerLeave={() => setTooltip(null)}
                     className={`h-7 border-r sm:h-8 ${
-                      canPaint ? "cursor-cell" : "cursor-default"
+                      canPaint ? "cursor-cell touch-none" : "cursor-default"
                     } last:border-r-0`}
                     style={{
                       ...colors,
@@ -613,7 +541,7 @@ export default function AvailabilityGrid({
       </div>
 
       {mode === "edit" && hasName ? (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 border-t border-zinc-200 bg-white/95 px-1 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
           <button
             type="button"
             onClick={saveAvailability}
