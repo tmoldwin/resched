@@ -11,8 +11,12 @@ import {
 import {
   buildSlotGrid,
   countAvailable,
+  formatMinutes24,
   normalizeSlots,
+  rowBorderColor,
   slotIndex,
+  slotStartMinutes,
+  type SlotGridMeta,
 } from "@/lib/slots";
 import type { EventResponse, ParticipantResponse } from "@/lib/types";
 
@@ -24,11 +28,113 @@ type AvailabilityGridProps = {
   onSaved?: (participant: ParticipantResponse & { editToken: string }) => void;
 };
 
+type PaintAnchor = {
+  dayIndex: number;
+  slotInDay: number;
+};
+
+const SELECTED_COLOR = "#16a34a";
+const EMPTY_COLOR = "#fafafa";
+const DAY_LINE = "#d4d4d8";
+const TIME_COLUMN = "3rem";
+
 function heatColor(count: number, total: number) {
-  if (count <= 0 || total <= 0) return "#f4f4f5";
-  const ratio = count / total;
-  const alpha = 0.2 + ratio * 0.75;
-  return `rgba(22, 163, 74, ${alpha.toFixed(3)})`;
+  if (count <= 0) return EMPTY_COLOR;
+  const effectiveTotal = Math.max(total, 1);
+  const ratio = count / effectiveTotal;
+  if (ratio >= 1) return SELECTED_COLOR;
+  const mix = 0.25 + ratio * 0.75;
+  const r = Math.round(250 + (22 - 250) * mix);
+  const g = Math.round(250 + (163 - 250) * mix);
+  const b = Math.round(250 + (74 - 250) * mix);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function indexToAnchor(index: number, slotsPerDay: number): PaintAnchor {
+  return {
+    dayIndex: Math.floor(index / slotsPerDay),
+    slotInDay: index % slotsPerDay,
+  };
+}
+
+function indicesInRectangle(
+  anchor: PaintAnchor,
+  end: PaintAnchor,
+  slotsPerDay: number,
+): number[] {
+  const minDay = Math.min(anchor.dayIndex, end.dayIndex);
+  const maxDay = Math.max(anchor.dayIndex, end.dayIndex);
+  const minSlot = Math.min(anchor.slotInDay, end.slotInDay);
+  const maxSlot = Math.max(anchor.slotInDay, end.slotInDay);
+  const indices: number[] = [];
+
+  for (let day = minDay; day <= maxDay; day++) {
+    for (let slot = minSlot; slot <= maxSlot; slot++) {
+      indices.push(slotIndex(day, slot, slotsPerDay));
+    }
+  }
+
+  return indices;
+}
+
+function gridColumns(dayCount: number) {
+  return `${TIME_COLUMN} repeat(${dayCount}, minmax(2.25rem, 1fr))`;
+}
+
+function cellColors(
+  index: number,
+  selected: boolean,
+  draftSlots: boolean[],
+  grid: SlotGridMeta,
+  mode: "edit" | "group",
+  count: number,
+  participantCount: number,
+  dayStartMinutes: number,
+  slotMinutes: number,
+) {
+  const { dayIndex, slotInDay } = indexToAnchor(index, grid.slotsPerDay);
+  const startMinutes = slotStartMinutes(dayStartMinutes, slotInDay, slotMinutes);
+  const lineColor = rowBorderColor(startMinutes);
+  const backgroundColor =
+    mode === "group"
+      ? heatColor(count, participantCount)
+      : selected
+        ? SELECTED_COLOR
+        : EMPTY_COLOR;
+
+  const aboveSelected =
+    slotInDay > 0 &&
+    draftSlots[slotIndex(dayIndex, slotInDay - 1, grid.slotsPerDay)];
+  const topColor =
+    mode === "edit" && selected && aboveSelected ? SELECTED_COLOR : lineColor;
+
+  if (mode !== "edit" || !selected) {
+    return {
+      backgroundColor,
+      borderTopColor: topColor,
+      borderRightColor: DAY_LINE,
+    };
+  }
+
+  const rightSelected =
+    dayIndex + 1 < grid.days.length &&
+    draftSlots[slotIndex(dayIndex + 1, slotInDay, grid.slotsPerDay)];
+  const belowSelected =
+    slotInDay + 1 < grid.slotsPerDay &&
+    draftSlots[slotIndex(dayIndex, slotInDay + 1, grid.slotsPerDay)];
+  const belowStart = slotStartMinutes(dayStartMinutes, slotInDay + 1, slotMinutes);
+  const belowLine = belowSelected
+    ? SELECTED_COLOR
+    : slotInDay + 1 < grid.slotsPerDay
+      ? rowBorderColor(belowStart)
+      : lineColor;
+
+  return {
+    backgroundColor,
+    borderTopColor: topColor,
+    borderRightColor: rightSelected ? SELECTED_COLOR : DAY_LINE,
+    borderBottomColor: belowLine,
+  };
 }
 
 export default function AvailabilityGrid({
@@ -54,7 +160,6 @@ export default function AvailabilityGrid({
   const [draftSlots, setDraftSlots] = useState<boolean[]>(() =>
     normalizeSlots(activeParticipant?.slots ?? [], grid.totalSlots),
   );
-  const [isPainting, setIsPainting] = useState(false);
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
@@ -62,8 +167,13 @@ export default function AvailabilityGrid({
   const gridRef = useRef<HTMLDivElement>(null);
   const paintingRef = useRef(false);
   const paintValueRef = useRef(true);
+  const paintAnchorRef = useRef<PaintAnchor | null>(null);
+  const snapshotRef = useRef<boolean[]>([]);
   const lastPaintedRef = useRef<number | null>(null);
   const draftSlotsRef = useRef(draftSlots);
+
+  const hasName = Boolean(activeParticipant?.name.trim());
+  const canPaint = mode === "edit" && hasName;
 
   useEffect(() => {
     draftSlotsRef.current = draftSlots;
@@ -75,23 +185,58 @@ export default function AvailabilityGrid({
     );
   }, [activeParticipant, grid.totalSlots]);
 
-  const availabilityCounts = useMemo(() => {
+  const { availabilityCounts, namesBySlot, contributorCount } = useMemo(() => {
     const counts = Array.from({ length: grid.totalSlots }, () => 0);
+    const names = Array.from({ length: grid.totalSlots }, () => [] as string[]);
+    const activeId = activeParticipant?.id;
+    const activeName = activeParticipant?.name.trim() ?? "";
+
     for (const participant of event.participants) {
+      if (activeId && participant.id === activeId) {
+        draftSlots.forEach((available, index) => {
+          if (available) {
+            counts[index] += 1;
+            names[index].push(activeName || participant.name);
+          }
+        });
+        continue;
+      }
+
       participant.slots.forEach((available, index) => {
-        if (available) counts[index] += 1;
+        if (available) {
+          counts[index] += 1;
+          names[index].push(participant.name);
+        }
       });
     }
-    return counts;
-  }, [event.participants, grid.totalSlots]);
 
-  const namesBySlot = useMemo(() => {
-    return Array.from({ length: grid.totalSlots }, (_, index) =>
-      event.participants
-        .filter((participant) => participant.slots[index])
-        .map((participant) => participant.name),
-    );
-  }, [event.participants, grid.totalSlots]);
+    if (activeName && activeId === "draft") {
+      draftSlots.forEach((available, index) => {
+        if (available) {
+          counts[index] += 1;
+          names[index].push(activeName);
+        }
+      });
+    }
+
+    const draftContributing =
+      activeName &&
+      activeId === "draft" &&
+      draftSlots.some(Boolean);
+    const contributors = event.participants.length + (draftContributing ? 1 : 0);
+
+    return {
+      availabilityCounts: counts,
+      namesBySlot: names,
+      contributorCount: contributors,
+    };
+  }, [
+    activeParticipant?.id,
+    activeParticipant?.name,
+    draftSlots,
+    event.participants,
+    grid.totalSlots,
+  ]);
 
   const resolveIndexFromPoint = useCallback((clientX: number, clientY: number) => {
     const target = document.elementFromPoint(clientX, clientY);
@@ -104,32 +249,40 @@ export default function AvailabilityGrid({
     return Number.isNaN(index) ? null : index;
   }, []);
 
-  const paintIndex = useCallback((index: number) => {
-    if (lastPaintedRef.current === index) return;
-    lastPaintedRef.current = index;
+  const paintRectangle = useCallback(
+    (endIndex: number) => {
+      const anchor = paintAnchorRef.current;
+      if (!anchor) return;
+      if (lastPaintedRef.current === endIndex) return;
+      lastPaintedRef.current = endIndex;
 
-    setDraftSlots((current) => {
-      if (current[index] === paintValueRef.current) return current;
-      const next = current.slice();
-      next[index] = paintValueRef.current;
-      return next;
-    });
-  }, []);
+      const end = indexToAnchor(endIndex, grid.slotsPerDay);
+      const indices = indicesInRectangle(anchor, end, grid.slotsPerDay);
+      const next = snapshotRef.current.slice();
+
+      for (const index of indices) {
+        next[index] = paintValueRef.current;
+      }
+
+      setDraftSlots(next);
+    },
+    [grid.slotsPerDay],
+  );
 
   const stopPainting = useCallback(() => {
     paintingRef.current = false;
+    paintAnchorRef.current = null;
     lastPaintedRef.current = null;
-    setIsPainting(false);
   }, []);
 
   useEffect(() => {
-    if (mode !== "edit") return;
+    if (!canPaint) return;
 
     function onPointerMove(event: PointerEvent) {
       if (!paintingRef.current) return;
       event.preventDefault();
       const index = resolveIndexFromPoint(event.clientX, event.clientY);
-      if (index !== null) paintIndex(index);
+      if (index !== null) paintRectangle(index);
     }
 
     function onPointerEnd() {
@@ -145,23 +298,23 @@ export default function AvailabilityGrid({
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
     };
-  }, [mode, paintIndex, resolveIndexFromPoint, stopPainting]);
+  }, [canPaint, paintRectangle, resolveIndexFromPoint, stopPainting]);
 
   function startPainting(
     index: number,
     pointerEvent: ReactPointerEvent<HTMLElement>,
   ) {
-    if (mode !== "edit") return;
+    if (!canPaint) return;
 
     pointerEvent.preventDefault();
     pointerEvent.stopPropagation();
 
-    const nextValue = !draftSlotsRef.current[index];
-    paintValueRef.current = nextValue;
+    snapshotRef.current = draftSlotsRef.current.slice();
+    paintAnchorRef.current = indexToAnchor(index, grid.slotsPerDay);
+    paintValueRef.current = !draftSlotsRef.current[index];
     paintingRef.current = true;
     lastPaintedRef.current = null;
-    setIsPainting(true);
-    paintIndex(index);
+    paintRectangle(index);
 
     if (gridRef.current) {
       gridRef.current.setPointerCapture(pointerEvent.pointerId);
@@ -229,7 +382,7 @@ export default function AvailabilityGrid({
   }
 
   const selectedCount = countAvailable(draftSlots);
-  const canEdit = mode === "edit";
+  const columnTemplate = gridColumns(grid.days.length);
 
   return (
     <div className="space-y-3">
@@ -261,98 +414,132 @@ export default function AvailabilityGrid({
 
         <p className="text-sm text-zinc-500">
           {mode === "edit"
-            ? `Drag across the grid to mark when you're free · ${selectedCount} slots`
-            : `Darker green = more overlap · ${event.participants.length} responses`}
+            ? hasName
+              ? `Click and drag to select a block · ${selectedCount} slots`
+              : "Enter your name above to mark your availability"
+            : contributorCount > 0
+              ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
+              : "No responses yet — mark your times and save"}
         </p>
       </div>
 
-      <div
-        ref={gridRef}
-        className={`overflow-auto rounded-lg border border-zinc-200 bg-white ${
-          canEdit ? "select-none" : ""
-        }`}
-        style={{ touchAction: canEdit ? "none" : "pan-x pan-y" }}
-        onPointerUp={stopPainting}
-      >
+      {mode === "group" ? (
+        <p className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white">
+          {tooltip ?? "Hover a slot to see who's available"}
+        </p>
+      ) : null}
+
+      <div className="relative">
+        {!hasName && mode === "edit" ? (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-zinc-100/80 backdrop-blur-[1px]">
+            <p className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 shadow-sm">
+              Enter your name
+            </p>
+          </div>
+        ) : null}
+
+        <div
+          ref={gridRef}
+          className={`overflow-auto rounded-lg border border-zinc-200 bg-white ${
+            canPaint ? "select-none" : ""
+          } ${!hasName && mode === "edit" ? "opacity-50" : ""}`}
+          style={{ touchAction: canPaint ? "none" : "pan-x pan-y" }}
+          onPointerUp={stopPainting}
+        >
         <div className="min-w-max">
           <div
-            className="sticky top-0 z-20 grid border-b border-zinc-200 bg-zinc-100/90 backdrop-blur"
-            style={{
-              gridTemplateColumns: `4rem repeat(${grid.days.length}, minmax(2.75rem, 1fr))`,
-            }}
+            className="sticky top-0 z-20 grid border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
+            style={{ gridTemplateColumns: columnTemplate }}
           >
-            <div className="sticky left-0 z-30 border-r border-zinc-200 bg-zinc-100 px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            <div className="sticky left-0 z-30 border-r border-zinc-300 bg-zinc-100 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide text-zinc-500">
               Time
             </div>
             {grid.days.map((day) => (
               <div
                 key={day.date}
-                className="border-r border-zinc-200 px-1 py-2 text-center text-xs font-medium text-zinc-700 last:border-r-0"
+                className="border-r border-zinc-300 px-0.5 py-2 text-center text-[11px] font-medium leading-tight text-zinc-700 last:border-r-0 sm:text-xs"
               >
-                <div>{day.shortLabel}</div>
-                <div className="hidden text-[10px] text-zinc-500 sm:block">
+                <div className="truncate">{day.shortLabel}</div>
+                <div className="hidden truncate text-[10px] font-normal text-zinc-500 sm:block">
                   {day.label}
                 </div>
               </div>
             ))}
           </div>
 
-          {Array.from({ length: grid.slotsPerDay }, (_, slotInDay) => (
+          {Array.from({ length: grid.slotsPerDay }, (_, slotInDay) => {
+            const startMinutes = slotStartMinutes(
+              event.dayStartMinutes,
+              slotInDay,
+              event.slotMinutes,
+            );
+            const timeLabel = grid.timeLabels[slotInDay];
+            const lineColor = rowBorderColor(startMinutes);
+
+            return (
             <div
               key={slotInDay}
-              className="grid border-b border-zinc-100 last:border-b-0"
-              style={{
-                gridTemplateColumns: `4rem repeat(${grid.days.length}, minmax(2.75rem, 1fr))`,
-              }}
+              className="grid"
+              style={{ gridTemplateColumns: columnTemplate }}
             >
-              <div className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-2 py-0 text-[11px] leading-10 text-zinc-500">
-                {grid.timeLabels[slotInDay]}
+              <div
+                className="sticky left-0 z-10 flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
+                style={{ borderTop: `1px solid ${lineColor}` }}
+              >
+                {timeLabel}
               </div>
 
               {grid.days.map((day, dayIndex) => {
                 const index = slotIndex(dayIndex, slotInDay, grid.slotsPerDay);
                 const selected = draftSlots[index];
                 const count = availabilityCounts[index];
+                const colors = cellColors(
+                  index,
+                  selected,
+                  draftSlots,
+                  grid,
+                  mode,
+                  count,
+                  contributorCount,
+                  event.dayStartMinutes,
+                  event.slotMinutes,
+                );
 
                 return (
                   <div
                     key={`${day.date}-${slotInDay}`}
                     role="button"
-                    tabIndex={canEdit ? 0 : -1}
+                    tabIndex={canPaint ? 0 : -1}
                     data-slot-index={index}
-                    aria-label={`${day.label} ${grid.timeLabels[slotInDay]}`}
-                    aria-pressed={canEdit ? selected : undefined}
+                    aria-label={`${day.label} ${timeLabel || formatMinutes24(startMinutes)}`}
+                    aria-pressed={canPaint ? selected : undefined}
+                    aria-disabled={!canPaint && mode === "edit"}
                     onPointerDown={(pointerEvent) =>
                       startPainting(index, pointerEvent)
                     }
                     onPointerEnter={() => showTooltip(index)}
                     onPointerLeave={() => setTooltip(null)}
-                    className={`h-10 border-r border-zinc-100 last:border-r-0 ${
-                      canEdit ? "cursor-crosshair active:opacity-90" : "cursor-default"
-                    }`}
+                    className={`h-7 border-r sm:h-8 ${
+                      canPaint ? "cursor-cell touch-none" : "cursor-default"
+                    } last:border-r-0`}
                     style={{
-                      backgroundColor:
-                        mode === "group"
-                          ? heatColor(count, event.participants.length)
-                          : selected
-                            ? "#16a34a"
-                            : "#fafafa",
+                      ...colors,
+                      borderTopWidth: 1,
+                      borderRightWidth: 1,
+                      borderBottomWidth: colors.borderBottomColor ? 1 : 0,
+                      borderStyle: "solid",
                     }}
                   />
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
+      </div>
 
-      {tooltip ? (
-        <p className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white">
-          {tooltip}
-        </p>
-      ) : null}
-
-      {mode === "edit" ? (
+      {mode === "edit" && hasName ? (
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"

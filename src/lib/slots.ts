@@ -23,14 +23,32 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatMinutes(minutes: number): string {
+export function formatMinutes24(minutes: number): string {
   const hours24 = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  const period = hours24 >= 12 ? "PM" : "AM";
-  const hours12 = hours24 % 12 || 12;
-  return mins === 0
-    ? `${hours12} ${period}`
-    : `${hours12}:${String(mins).padStart(2, "0")} ${period}`;
+  return `${String(hours24).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+export function slotStartMinutes(
+  dayStartMinutes: number,
+  slotInDay: number,
+  slotMinutes: number,
+): number {
+  return dayStartMinutes + slotInDay * slotMinutes;
+}
+
+export function isHourBoundary(minutes: number): boolean {
+  return minutes % 60 === 0;
+}
+
+export function isHalfHourBoundary(minutes: number): boolean {
+  return minutes % 30 === 0 && minutes % 60 !== 0;
+}
+
+export function rowBorderColor(minutes: number): string {
+  if (isHourBoundary(minutes)) return "#a1a1aa";
+  if (isHalfHourBoundary(minutes)) return "#d4d4d8";
+  return "#e4e4e7";
 }
 
 export function enumerateDays(startDate: string, endDate: string): DayColumn[] {
@@ -70,9 +88,10 @@ export function buildSlotGrid(
 ): SlotGridMeta {
   const days = enumerateDays(startDate, endDate);
   const slotsPerDay = (dayEndMinutes - dayStartMinutes) / slotMinutes;
-  const timeLabels = Array.from({ length: slotsPerDay }, (_, index) =>
-    formatMinutes(dayStartMinutes + index * slotMinutes),
-  );
+  const timeLabels = Array.from({ length: slotsPerDay }, (_, index) => {
+    const start = slotStartMinutes(dayStartMinutes, index, slotMinutes);
+    return isHourBoundary(start) ? formatMinutes24(start) : "";
+  });
 
   return {
     days,

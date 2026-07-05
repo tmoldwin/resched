@@ -31,11 +31,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid time range." }, { status: 400 });
     }
 
-    const slotMinutes = body.slotMinutes || 15;
-    if (![15, 30, 60].includes(slotMinutes)) {
-      return NextResponse.json({ error: "Slot size must be 15, 30, or 60 minutes." }, { status: 400 });
-    }
-
     const id = nanoid(12);
     const slug = slugify(body.name.trim());
     const timezone =
@@ -52,7 +47,7 @@ export async function POST(request: Request) {
       dayStartMinutes: body.dayStartMinutes,
       dayEndMinutes: body.dayEndMinutes,
       timezone,
-      slotMinutes,
+      slotMinutes: 15,
       passwordHash: body.password?.trim()
         ? hashPassword(body.password.trim())
         : null,

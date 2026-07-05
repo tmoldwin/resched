@@ -3,8 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const SLOT_OPTIONS = [15, 30, 60] as const;
-
 function todayString() {
   const now = new Date();
   const year = now.getFullYear();
@@ -35,7 +33,6 @@ export default function CreateEventForm() {
   const [endDate, setEndDate] = useState(addDays(startDefault, 6));
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
-  const [slotMinutes, setSlotMinutes] = useState<(typeof SLOT_OPTIONS)[number]>(15);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -60,7 +57,6 @@ export default function CreateEventForm() {
           dayStartMinutes: timeToMinutes(startTime),
           dayEndMinutes: timeToMinutes(endTime),
           timezone,
-          slotMinutes,
           password: password.trim() || undefined,
         }),
       });
@@ -161,26 +157,6 @@ export default function CreateEventForm() {
             onChange={(event) => setEndTime(event.target.value)}
             className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
           />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <span className="text-sm font-medium text-zinc-800">Slot size</span>
-        <div className="grid grid-cols-3 gap-2">
-          {SLOT_OPTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setSlotMinutes(option)}
-              className={`rounded-md border px-3 py-2 text-sm transition ${
-                slotMinutes === option
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
-              }`}
-            >
-              {option} min
-            </button>
-          ))}
         </div>
       </div>
 

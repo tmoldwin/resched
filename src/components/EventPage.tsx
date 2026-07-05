@@ -38,6 +38,7 @@ export default function EventPage({ slug }: EventPageProps) {
   const [unlocked, setUnlocked] = useState(false);
   const [unlockError, setUnlockError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
 
   const loadEvent = useCallback(async () => {
     setLoading(true);
@@ -66,6 +67,10 @@ export default function EventPage({ slug }: EventPageProps) {
   useEffect(() => {
     void loadEvent();
   }, [loadEvent]);
+
+  useEffect(() => {
+    setShareUrl(window.location.href);
+  }, []);
 
   useEffect(() => {
     const raw = localStorage.getItem(storageKey(slug));
@@ -205,22 +210,34 @@ export default function EventPage({ slug }: EventPageProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:py-8">
       <section className="space-y-4 border-b border-zinc-200 pb-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {event.name}
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {event.startDate} to {event.endDate} · {event.timezone}
-            </p>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            {event.name}
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            {event.startDate} to {event.endDate} · {event.timezone}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-zinc-800" htmlFor="share-link">
+            Share link
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              id="share-link"
+              readOnly
+              value={shareUrl}
+              className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700 outline-none"
+            />
+            <button
+              type="button"
+              onClick={copyLink}
+              className="shrink-0 rounded-md border border-zinc-200 px-3 py-2.5 text-sm text-zinc-700 transition hover:bg-zinc-50"
+            >
+              {copied ? "Copied" : "Copy link"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={copyLink}
-            className="rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
-          >
-            {copied ? "Copied" : "Copy link"}
-          </button>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
