@@ -161,7 +161,11 @@ export default function AvailabilityGrid({
   const [draftSlots, setDraftSlots] = useState<boolean[]>(() =>
     normalizeSlots(activeParticipant?.slots ?? [], grid.totalSlots),
   );
-  const [tooltip, setTooltip] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
@@ -175,6 +179,10 @@ export default function AvailabilityGrid({
 
   const hasName = Boolean(activeParticipant?.name.trim());
   const canPaint = mode === "edit" && hasName;
+
+  useEffect(() => {
+    setTooltip(null);
+  }, [mode]);
 
   useEffect(() => {
     draftSlotsRef.current = draftSlots;
@@ -325,14 +333,29 @@ export default function AvailabilityGrid({
     beginPaint(index, pointerEvent.pointerId);
   }
 
-  function showTooltip(index: number) {
-    if (mode !== "group") return;
+  function slotTooltipText(index: number) {
     const names = namesBySlot[index];
-    setTooltip(
-      names.length > 0
-        ? `${names.length} available: ${names.join(", ")}`
-        : "Nobody available",
-    );
+    return names.length > 0
+      ? `${names.length} available: ${names.join(", ")}`
+      : "Nobody available";
+  }
+
+  function showSlotTooltip(
+    index: number,
+    clientX: number,
+    clientY: number,
+  ) {
+    if (mode !== "group") return;
+    setTooltip({
+      text: slotTooltipText(index),
+      x: clientX,
+      y: clientY,
+    });
+  }
+
+  function hideSlotTooltip() {
+    if (mode !== "group") return;
+    setTooltip(null);
   }
 
   async function saveAvailability() {
@@ -427,12 +450,6 @@ export default function AvailabilityGrid({
         </p>
       </div>
 
-      {mode === "group" ? (
-        <p className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white">
-          {tooltip ?? "Hover a slot to see who's available"}
-        </p>
-      ) : null}
-
       <div
         className={`-mx-4 flex w-full items-stretch sm:mx-0 ${canPaint ? "select-none" : ""}`}
       >
@@ -512,22 +529,69 @@ export default function AvailabilityGrid({
                   event.slotMinutes,
                 );
 
+                const slotNames = namesBySlot[index];
+
                 return (
                   <div
                     key={`${day.date}-${slotInDay}`}
-                    role="button"
-                    tabIndex={canPaint ? 0 : -1}
+                    role={mode === "group" ? undefined : "button"}
+                    tabIndex={canPaint ? 0 : mode === "group" ? 0 : -1}
                     data-slot-index={index}
-                    aria-label={`${day.label} ${timeLabel || formatMinutes24(startMinutes)}`}
+                    aria-label={`${day.label} ${timeLabel || formatMinutes24(startMinutes)}${
+                      mode === "group" && slotNames.length > 0
+                        ? ` · ${slotNames.join(", ")}`
+                        : ""
+                    }`}
                     aria-pressed={canPaint ? selected : undefined}
                     aria-disabled={!canPaint && mode === "edit"}
                     onPointerDown={(pointerEvent) =>
                       startPainting(index, pointerEvent)
                     }
-                    onPointerEnter={() => showTooltip(index)}
-                    onPointerLeave={() => setTooltip(null)}
+                    onMouseEnter={(mouseEvent) =>
+                      showSlotTooltip(
+                        index,
+                        mouseEvent.clientX,
+                        mouseEvent.clientY,
+                      )
+                    }
+                    onMouseMove={(mouseEvent) =>
+                      showSlotTooltip(
+                        index,
+                        mouseEvent.clientX,
+                        mouseEvent.clientY,
+                      )
+                    }
+                    onMouseLeave={hideSlotTooltip}
+                    onPointerEnter={(pointerEvent) => {
+                      if (mode !== "group" || pointerEvent.pointerType === "mouse") {
+                        return;
+                      }
+                      showSlotTooltip(
+                        index,
+                        pointerEvent.clientX,
+                        pointerEvent.clientY,
+                      );
+                    }}
+                    onPointerLeave={(pointerEvent) => {
+                      if (pointerEvent.pointerType === "touch") {
+                        hideSlotTooltip();
+                      }
+                    }}
+                    onFocus={(focusEvent) => {
+                      const rect = focusEvent.currentTarget.getBoundingClientRect();
+                      showSlotTooltip(
+                        index,
+                        rect.left + rect.width / 2,
+                        rect.top,
+                      );
+                    }}
+                    onBlur={hideSlotTooltip}
                     className={`h-7 border-r sm:h-8 ${
-                      canPaint ? "cursor-cell touch-none" : "cursor-default"
+                      canPaint
+                        ? "cursor-cell touch-none"
+                        : mode === "group"
+                          ? "cursor-help"
+                          : "cursor-default"
                     } last:border-r-0`}
                     style={{
                       ...colors,
@@ -546,6 +610,16 @@ export default function AvailabilityGrid({
 
         <div className={SCROLL_MARGIN_CLASS} aria-hidden />
       </div>
+
+      {tooltip && mode === "group" ? (
+        <div
+          className="pointer-events-none fixed z-50 max-w-xs rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs leading-snug text-white shadow-lg"
+          style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
+          role="tooltip"
+        >
+          {tooltip.text}
+        </div>
+      ) : null}
 
       {mode === "edit" && hasName ? (
         <div className="flex flex-wrap items-center gap-3">
