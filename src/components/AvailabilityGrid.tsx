@@ -38,13 +38,22 @@ const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
 const SCROLL_MARGIN_CLASS = "w-16 shrink-0 self-stretch touch-pan-y sm:w-8";
+const THUMB_TOOLTIP_OFFSET = 72;
+
+type TooltipState = {
+  headline: string;
+  detail: string;
+  x: number;
+  y: number;
+  placement: "above" | "follow";
+};
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
   const effectiveTotal = Math.max(total, 1);
   const ratio = count / effectiveTotal;
   if (ratio >= 1) return SELECTED_COLOR;
-  const mix = 0.25 + ratio * 0.75;
+  const mix = 0.12 + ratio * 0.88;
   const r = Math.round(250 + (22 - 250) * mix);
   const g = Math.round(250 + (163 - 250) * mix);
   const b = Math.round(250 + (74 - 250) * mix);
@@ -161,11 +170,8 @@ export default function AvailabilityGrid({
   const [draftSlots, setDraftSlots] = useState<boolean[]>(() =>
     normalizeSlots(activeParticipant?.slots ?? [], grid.totalSlots),
   );
-  const [tooltip, setTooltip] = useState<{
-    text: string;
-    x: number;
-    y: number;
-  } | null>(null);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [groupFocusIndex, setGroupFocusIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
@@ -182,7 +188,26 @@ export default function AvailabilityGrid({
 
   useEffect(() => {
     setTooltip(null);
+    setGroupFocusIndex(null);
   }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "group" || groupFocusIndex === null) return;
+
+    function onPointerDown(event: PointerEvent) {
+      const cell = (event.target as HTMLElement | null)?.closest(
+        "[data-slot-index]",
+      );
+      if (cell instanceof HTMLElement && gridRef.current?.contains(cell)) {
+        return;
+      }
+      setGroupFocusIndex(null);
+      setTooltip(null);
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [groupFocusIndex, mode]);
 
   useEffect(() => {
     draftSlotsRef.current = draftSlots;
@@ -333,29 +358,75 @@ export default function AvailabilityGrid({
     beginPaint(index, pointerEvent.pointerId);
   }
 
-  function slotTooltipText(index: number) {
+  function slotTooltipDetail(index: number) {
     const names = namesBySlot[index];
     return names.length > 0
       ? `${names.length} available: ${names.join(", ")}`
       : "Nobody available";
   }
 
+  function slotTooltipHeadline(index: number) {
+    const { dayIndex, slotInDay } = indexToAnchor(index, grid.slotsPerDay);
+    const day = grid.days[dayIndex];
+    const startMinutes = slotStartMinutes(
+      event.dayStartMinutes,
+      slotInDay,
+      event.slotMinutes,
+    );
+    const time =
+      grid.timeLabels[slotInDay] || formatMinutes24(startMinutes);
+    return `${day.label} · ${time}`;
+  }
+
   function showSlotTooltip(
     index: number,
     clientX: number,
     clientY: number,
+    placement: TooltipState["placement"] = "follow",
   ) {
     if (mode !== "group") return;
     setTooltip({
-      text: slotTooltipText(index),
+      headline: slotTooltipHeadline(index),
+      detail: slotTooltipDetail(index),
       x: clientX,
       y: clientY,
+      placement,
     });
   }
 
   function hideSlotTooltip() {
     if (mode !== "group") return;
     setTooltip(null);
+    setGroupFocusIndex(null);
+  }
+
+  function inspectGroupSlot(
+    index: number,
+    pointerEvent: ReactPointerEvent<HTMLElement>,
+  ) {
+    if (mode !== "group") return;
+
+    pointerEvent.preventDefault();
+    pointerEvent.stopPropagation();
+    setGroupFocusIndex(index);
+
+    if (pointerEvent.pointerType === "touch") {
+      showSlotTooltip(
+        index,
+        pointerEvent.clientX,
+        pointerEvent.clientY,
+        "above",
+      );
+      return;
+    }
+
+    const rect = pointerEvent.currentTarget.getBoundingClientRect();
+    showSlotTooltip(
+      index,
+      rect.left + rect.width / 2,
+      rect.top,
+      "above",
+    );
   }
 
   async function saveAvailability() {
@@ -530,6 +601,8 @@ export default function AvailabilityGrid({
                 );
 
                 const slotNames = namesBySlot[index];
+                const isGroupFocused =
+                  mode === "group" && groupFocusIndex === index;
 
                 return (
                   <div
@@ -544,53 +617,56 @@ export default function AvailabilityGrid({
                     }`}
                     aria-pressed={canPaint ? selected : undefined}
                     aria-disabled={!canPaint && mode === "edit"}
-                    onPointerDown={(pointerEvent) =>
-                      startPainting(index, pointerEvent)
-                    }
-                    onMouseEnter={(mouseEvent) =>
-                      showSlotTooltip(
-                        index,
-                        mouseEvent.clientX,
-                        mouseEvent.clientY,
-                      )
-                    }
-                    onMouseMove={(mouseEvent) =>
-                      showSlotTooltip(
-                        index,
-                        mouseEvent.clientX,
-                        mouseEvent.clientY,
-                      )
-                    }
-                    onMouseLeave={hideSlotTooltip}
-                    onPointerEnter={(pointerEvent) => {
-                      if (mode !== "group" || pointerEvent.pointerType === "mouse") {
+                    onPointerDown={(pointerEvent) => {
+                      if (mode === "group") {
+                        inspectGroupSlot(index, pointerEvent);
                         return;
                       }
+                      startPainting(index, pointerEvent);
+                    }}
+                    onMouseEnter={(mouseEvent) => {
+                      if (mode !== "group") return;
+                      setGroupFocusIndex(index);
                       showSlotTooltip(
                         index,
-                        pointerEvent.clientX,
-                        pointerEvent.clientY,
+                        mouseEvent.clientX,
+                        mouseEvent.clientY,
+                        "follow",
                       );
                     }}
-                    onPointerLeave={(pointerEvent) => {
-                      if (pointerEvent.pointerType === "touch") {
-                        hideSlotTooltip();
-                      }
+                    onMouseMove={(mouseEvent) => {
+                      if (mode !== "group") return;
+                      showSlotTooltip(
+                        index,
+                        mouseEvent.clientX,
+                        mouseEvent.clientY,
+                        "follow",
+                      );
+                    }}
+                    onMouseLeave={() => {
+                      if (mode !== "group") return;
+                      hideSlotTooltip();
                     }}
                     onFocus={(focusEvent) => {
+                      if (mode !== "group") return;
+                      setGroupFocusIndex(index);
                       const rect = focusEvent.currentTarget.getBoundingClientRect();
                       showSlotTooltip(
                         index,
                         rect.left + rect.width / 2,
                         rect.top,
+                        "above",
                       );
                     }}
-                    onBlur={hideSlotTooltip}
+                    onBlur={() => {
+                      if (mode !== "group") return;
+                      hideSlotTooltip();
+                    }}
                     className={`h-7 border-r sm:h-8 ${
                       canPaint
                         ? "cursor-cell touch-none"
                         : mode === "group"
-                          ? "cursor-help"
+                          ? "cursor-pointer touch-manipulation"
                           : "cursor-default"
                     } last:border-r-0`}
                     style={{
@@ -599,6 +675,14 @@ export default function AvailabilityGrid({
                       borderRightWidth: 1,
                       borderBottomWidth: colors.borderBottomColor ? 1 : 0,
                       borderStyle: "solid",
+                      WebkitTapHighlightColor: "transparent",
+                      ...(isGroupFocused
+                        ? {
+                            boxShadow: "inset 0 0 0 2px #15803d",
+                            zIndex: 1,
+                            position: "relative" as const,
+                          }
+                        : {}),
                     }}
                   />
                 );
@@ -614,10 +698,18 @@ export default function AvailabilityGrid({
       {tooltip && mode === "group" ? (
         <div
           className="pointer-events-none fixed z-50 max-w-xs rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs leading-snug text-white shadow-lg"
-          style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+            transform:
+              tooltip.placement === "above"
+                ? `translate(-50%, calc(-100% - ${THUMB_TOOLTIP_OFFSET}px))`
+                : "translate(12px, 12px)",
+          }}
           role="tooltip"
         >
-          {tooltip.text}
+          <div className="font-medium">{tooltip.headline}</div>
+          <div className="mt-0.5 text-zinc-300">{tooltip.detail}</div>
         </div>
       ) : null}
 
