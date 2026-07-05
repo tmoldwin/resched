@@ -155,17 +155,19 @@ export default function EventPage({ slug }: EventPageProps) {
 
   if (loading) {
     return (
-      <div className="mx-auto flex min-h-[50vh] max-w-6xl items-center justify-center px-4 py-10">
-        <div className="text-zinc-600">Loading event...</div>
+      <div className="mx-auto flex min-h-[40vh] max-w-5xl items-center justify-center px-4">
+        <p className="text-sm text-zinc-500">Loading...</p>
       </div>
     );
   }
 
   if (error || !event) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-2xl font-semibold text-zinc-900">Event not found</h1>
-        <p className="mt-3 text-zinc-600">{error || "This link may be invalid."}</p>
+      <div className="mx-auto max-w-5xl px-4 py-16 text-center">
+        <h1 className="text-xl font-semibold">Event not found</h1>
+        <p className="mt-2 text-sm text-zinc-500">
+          {error || "This link may be invalid."}
+        </p>
       </div>
     );
   }
@@ -173,28 +175,26 @@ export default function EventPage({ slug }: EventPageProps) {
   if (event.locked && !unlocked) {
     return (
       <div className="mx-auto max-w-md px-4 py-16">
-        <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-semibold text-zinc-900">{event.name}</h1>
-          <p className="mt-2 text-sm text-zinc-600">
-            This event is password protected.
-          </p>
-          <div className="mt-6 space-y-3">
+        <div className="rounded-lg border border-zinc-200 p-5">
+          <h1 className="text-xl font-semibold">{event.name}</h1>
+          <p className="mt-1 text-sm text-zinc-500">Password required</p>
+          <div className="mt-4 space-y-3">
             <input
               type="password"
               value={passwordInput}
               onChange={(inputEvent) => setPasswordInput(inputEvent.target.value)}
-              placeholder="Enter password"
-              className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 focus:bg-white focus:ring-2"
+              placeholder="Password"
+              className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
             />
             {unlockError ? (
-              <div className="text-sm text-red-600">{unlockError}</div>
+              <p className="text-sm text-red-600">{unlockError}</p>
             ) : null}
             <button
               type="button"
               onClick={unlockEvent}
-              className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700"
+              className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800"
             >
-              Unlock event
+              Continue
             </button>
           </div>
         </div>
@@ -203,46 +203,43 @@ export default function EventPage({ slug }: EventPageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-10">
-      <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:py-8">
+      <section className="space-y-4 border-b border-zinc-200 pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-emerald-700">
-              resched
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-zinc-900 sm:text-3xl">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
               {event.name}
             </h1>
-            <p className="mt-2 text-sm text-zinc-600">
+            <p className="mt-1 text-sm text-zinc-500">
               {event.startDate} to {event.endDate} · {event.timezone}
             </p>
           </div>
           <button
             type="button"
             onClick={copyLink}
-            className="rounded-2xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            className="rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
           >
-            {copied ? "Copied!" : "Copy link"}
+            {copied ? "Copied" : "Copy link"}
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700" htmlFor="participant-name">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-800" htmlFor="participant-name">
               Your name
             </label>
             <input
               id="participant-name"
               value={name}
               onChange={(inputEvent) => setName(inputEvent.target.value)}
-              placeholder="Enter your name to respond"
-              className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 focus:bg-white focus:ring-2"
+              placeholder="Add your name"
+              className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
             />
           </div>
-          <div className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-            {event.participants.length} participant
+          <p className="text-sm text-zinc-500">
+            {event.participants.length} response
             {event.participants.length === 1 ? "" : "s"}
-          </div>
+          </p>
         </div>
       </section>
 

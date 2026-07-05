@@ -20,12 +20,6 @@ function addDays(dateStr: string, days: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function minutesToTime(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
-}
-
 function timeToMinutes(value: string) {
   const [hours, mins] = value.split(":").map(Number);
   return hours * 60 + mins;
@@ -47,7 +41,7 @@ export default function CreateEventForm() {
   const [error, setError] = useState("");
 
   const previewRange = useMemo(() => {
-    return `${startDate} → ${endDate} · ${startTime}–${endTime}`;
+    return `${startDate} to ${endDate}, ${startTime}–${endTime}`;
   }, [startDate, endDate, startTime, endTime]);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -91,10 +85,10 @@ export default function CreateEventForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full max-w-xl space-y-6 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8"
+      className="max-w-lg space-y-5 rounded-lg border border-zinc-200 p-5 sm:p-6"
     >
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-zinc-700" htmlFor="name">
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-zinc-800" htmlFor="name">
           Event name
         </label>
         <input
@@ -102,14 +96,14 @@ export default function CreateEventForm() {
           required
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Team sync, dinner plans, study group..."
-          className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base outline-none ring-emerald-500 transition focus:bg-white focus:ring-2"
+          placeholder="Team sync"
+          className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-zinc-700" htmlFor="startDate">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-zinc-800" htmlFor="startDate">
             Start date
           </label>
           <input
@@ -122,11 +116,11 @@ export default function CreateEventForm() {
               setStartDate(value);
               if (value > endDate) setEndDate(value);
             }}
-            className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 transition focus:bg-white focus:ring-2"
+            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
           />
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-zinc-700" htmlFor="endDate">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-zinc-800" htmlFor="endDate">
             End date
           </label>
           <input
@@ -136,14 +130,14 @@ export default function CreateEventForm() {
             min={startDate}
             value={endDate}
             onChange={(event) => setEndDate(event.target.value)}
-            className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 transition focus:bg-white focus:ring-2"
+            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
           />
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-zinc-700" htmlFor="startTime">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-zinc-800" htmlFor="startTime">
             Daily start
           </label>
           <input
@@ -152,11 +146,11 @@ export default function CreateEventForm() {
             required
             value={startTime}
             onChange={(event) => setStartTime(event.target.value)}
-            className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 transition focus:bg-white focus:ring-2"
+            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
           />
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-zinc-700" htmlFor="endTime">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-zinc-800" htmlFor="endTime">
             Daily end
           </label>
           <input
@@ -165,23 +159,23 @@ export default function CreateEventForm() {
             required
             value={endTime}
             onChange={(event) => setEndTime(event.target.value)}
-            className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 transition focus:bg-white focus:ring-2"
+            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
           />
         </div>
       </div>
 
-      <div className="space-y-2">
-        <span className="text-sm font-medium text-zinc-700">Time slot size</span>
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium text-zinc-800">Slot size</span>
         <div className="grid grid-cols-3 gap-2">
           {SLOT_OPTIONS.map((option) => (
             <button
               key={option}
               type="button"
               onClick={() => setSlotMinutes(option)}
-              className={`rounded-2xl border px-3 py-3 text-sm font-medium transition ${
+              className={`rounded-md border px-3 py-2 text-sm transition ${
                 slotMinutes === option
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                  : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:border-zinc-300"
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
               }`}
             >
               {option} min
@@ -190,36 +184,33 @@ export default function CreateEventForm() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-zinc-700" htmlFor="password">
-          Password (optional)
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-zinc-800" htmlFor="password">
+          Password <span className="font-normal text-zinc-500">(optional)</span>
         </label>
         <input
           id="password"
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="Keep the event private"
-          className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 outline-none ring-emerald-500 transition focus:bg-white focus:ring-2"
+          className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
         />
       </div>
 
-      <div className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-        <div className="font-medium text-zinc-800">Preview</div>
-        <div>{previewRange}</div>
-        <div>Timezone: {timezone}</div>
-      </div>
+      <p className="text-sm text-zinc-500">
+        {previewRange} · {timezone}
+      </p>
 
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
-        </div>
+        </p>
       ) : null}
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-2xl bg-emerald-600 px-4 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50"
       >
         {loading ? "Creating..." : "Create event"}
       </button>

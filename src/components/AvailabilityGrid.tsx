@@ -24,21 +24,11 @@ type AvailabilityGridProps = {
   onSaved?: (participant: ParticipantResponse & { editToken: string }) => void;
 };
 
-type GridCell = {
-  dayIndex: number;
-  slotInDay: number;
-  index: number;
-};
-
 function heatColor(count: number, total: number) {
-  if (count <= 0 || total <= 0) return "rgb(244 244 245)";
+  if (count <= 0 || total <= 0) return "#f4f4f5";
   const ratio = count / total;
-  const alpha = 0.18 + ratio * 0.72;
-  return `rgba(16, 185, 129, ${alpha.toFixed(3)})`;
-}
-
-function selectionColor(selected: boolean) {
-  return selected ? "rgb(16 185 129)" : "rgb(250 250 250)";
+  const alpha = 0.2 + ratio * 0.75;
+  return `rgba(22, 163, 74, ${alpha.toFixed(3)})`;
 }
 
 export default function AvailabilityGrid({
@@ -60,18 +50,24 @@ export default function AvailabilityGrid({
     [event],
   );
 
-  const [mode, setMode] = useState<"edit" | "group">(
-    activeParticipant ? "edit" : "group",
-  );
+  const [mode, setMode] = useState<"edit" | "group">("edit");
   const [draftSlots, setDraftSlots] = useState<boolean[]>(() =>
     normalizeSlots(activeParticipant?.slots ?? [], grid.totalSlots),
   );
-  const [paintValue, setPaintValue] = useState(true);
   const [isPainting, setIsPainting] = useState(false);
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
+
+  const gridRef = useRef<HTMLDivElement>(null);
+  const paintingRef = useRef(false);
+  const paintValueRef = useRef(true);
+  const lastPaintedRef = useRef<number | null>(null);
+  const draftSlotsRef = useRef(draftSlots);
+
+  useEffect(() => {
+    draftSlotsRef.current = draftSlots;
+  }, [draftSlots]);
 
   useEffect(() => {
     setDraftSlots(
@@ -97,84 +93,90 @@ export default function AvailabilityGrid({
     );
   }, [event.participants, grid.totalSlots]);
 
-  const applyPaint = useCallback(
-    (cell: GridCell) => {
-      setDraftSlots((current) => {
-        const next = current.slice();
-        next[cell.index] = paintValue;
-        return next;
-      });
-    },
-    [paintValue],
-  );
+  const resolveIndexFromPoint = useCallback((clientX: number, clientY: number) => {
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!target || !(target instanceof HTMLElement)) return null;
+    const cell = target.closest("[data-slot-index]");
+    if (!cell || !(cell instanceof HTMLElement)) return null;
+    if (!gridRef.current?.contains(cell)) return null;
 
-  const resolveCellFromPoint = useCallback(
-    (clientX: number, clientY: number): GridCell | null => {
-      const target = document.elementFromPoint(clientX, clientY);
-      if (!target || !(target instanceof HTMLElement)) return null;
-      const button = target.closest("[data-slot-index]");
-      if (!button || !(button instanceof HTMLElement)) return null;
+    const index = Number(cell.dataset.slotIndex);
+    return Number.isNaN(index) ? null : index;
+  }, []);
 
-      const index = Number(button.dataset.slotIndex);
-      const dayIndex = Number(button.dataset.dayIndex);
-      const slotInDay = Number(button.dataset.slotInDay);
-      if (Number.isNaN(index)) return null;
+  const paintIndex = useCallback((index: number) => {
+    if (lastPaintedRef.current === index) return;
+    lastPaintedRef.current = index;
 
-      return { index, dayIndex, slotInDay };
-    },
-    [],
-  );
+    setDraftSlots((current) => {
+      if (current[index] === paintValueRef.current) return current;
+      const next = current.slice();
+      next[index] = paintValueRef.current;
+      return next;
+    });
+  }, []);
 
-  function handlePointerDown(
-    cell: GridCell,
-    pointerEvent: ReactPointerEvent<HTMLButtonElement>,
-  ) {
-    if (mode !== "edit" || !activeParticipant) return;
-
-    pointerEvent.preventDefault();
-    pointerEvent.currentTarget.setPointerCapture(pointerEvent.pointerId);
-    setIsPainting(true);
-    setPaintValue(!draftSlots[cell.index]);
-    applyPaint(cell);
-  }
-
-  function handlePointerEnter(
-    cell: GridCell,
-    pointerEvent: ReactPointerEvent<HTMLButtonElement>,
-  ) {
-    if (mode === "group") {
-      const names = namesBySlot[cell.index];
-      setTooltip(
-        names.length > 0
-          ? `${names.length} available: ${names.join(", ")}`
-          : "Nobody available",
-      );
-      return;
-    }
-
-    if (!isPainting) return;
-    pointerEvent.preventDefault();
-    applyPaint(cell);
-  }
-
-  function handlePointerUp(pointerEvent: ReactPointerEvent<HTMLButtonElement>) {
-    if (pointerEvent.currentTarget.hasPointerCapture(pointerEvent.pointerId)) {
-      pointerEvent.currentTarget.releasePointerCapture(pointerEvent.pointerId);
-    }
+  const stopPainting = useCallback(() => {
+    paintingRef.current = false;
+    lastPaintedRef.current = null;
     setIsPainting(false);
-  }
+  }, []);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    if (mode !== "edit") return;
 
-    function preventScroll(event: TouchEvent) {
-      if (isPainting) event.preventDefault();
+    function onPointerMove(event: PointerEvent) {
+      if (!paintingRef.current) return;
+      event.preventDefault();
+      const index = resolveIndexFromPoint(event.clientX, event.clientY);
+      if (index !== null) paintIndex(index);
     }
 
-    container.addEventListener("touchmove", preventScroll, { passive: false });
-    return () => container.removeEventListener("touchmove", preventScroll);
-  }, [isPainting]);
+    function onPointerEnd() {
+      stopPainting();
+    }
+
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
+    };
+  }, [mode, paintIndex, resolveIndexFromPoint, stopPainting]);
+
+  function startPainting(
+    index: number,
+    pointerEvent: ReactPointerEvent<HTMLElement>,
+  ) {
+    if (mode !== "edit") return;
+
+    pointerEvent.preventDefault();
+    pointerEvent.stopPropagation();
+
+    const nextValue = !draftSlotsRef.current[index];
+    paintValueRef.current = nextValue;
+    paintingRef.current = true;
+    lastPaintedRef.current = null;
+    setIsPainting(true);
+    paintIndex(index);
+
+    if (gridRef.current) {
+      gridRef.current.setPointerCapture(pointerEvent.pointerId);
+    }
+  }
+
+  function showTooltip(index: number) {
+    if (mode !== "group") return;
+    const names = namesBySlot[index];
+    setTooltip(
+      names.length > 0
+        ? `${names.length} available: ${names.join(", ")}`
+        : "Nobody available",
+    );
+  }
 
   async function saveAvailability() {
     if (!activeParticipant?.name.trim()) {
@@ -227,19 +229,19 @@ export default function AvailabilityGrid({
   }
 
   const selectedCount = countAvailable(draftSlots);
+  const canEdit = mode === "edit";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-2xl border border-zinc-200 bg-white p-1">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5">
           <button
             type="button"
             onClick={() => setMode("edit")}
-            disabled={!activeParticipant}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
               mode === "edit"
-                ? "bg-emerald-600 text-white"
-                : "text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                ? "bg-zinc-900 text-white"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
             Your times
@@ -247,49 +249,50 @@ export default function AvailabilityGrid({
           <button
             type="button"
             onClick={() => setMode("group")}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
               mode === "group"
-                ? "bg-emerald-600 text-white"
-                : "text-zinc-600 hover:bg-zinc-50"
+                ? "bg-zinc-900 text-white"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
-            Group heatmap
+            Group view
           </button>
         </div>
 
-        {mode === "edit" ? (
-          <div className="text-sm text-zinc-600">
-            Drag to mark when you&apos;re free · {selectedCount} slots selected
-          </div>
-        ) : (
-          <div className="text-sm text-zinc-600">
-            Darker green = more people free · {event.participants.length} responses
-          </div>
-        )}
+        <p className="text-sm text-zinc-500">
+          {mode === "edit"
+            ? `Drag across the grid to mark when you're free · ${selectedCount} slots`
+            : `Darker green = more overlap · ${event.participants.length} responses`}
+        </p>
       </div>
 
       <div
-        ref={containerRef}
-        className="overflow-auto rounded-3xl border border-zinc-200 bg-white shadow-sm"
-        style={{ touchAction: isPainting ? "none" : "pan-x pan-y" }}
+        ref={gridRef}
+        className={`overflow-auto rounded-lg border border-zinc-200 bg-white ${
+          canEdit ? "select-none" : ""
+        }`}
+        style={{ touchAction: canEdit ? "none" : "pan-x pan-y" }}
+        onPointerUp={stopPainting}
       >
         <div className="min-w-max">
           <div
-            className="sticky top-0 z-20 grid border-b border-zinc-200 bg-zinc-50"
+            className="sticky top-0 z-20 grid border-b border-zinc-200 bg-zinc-100/90 backdrop-blur"
             style={{
-              gridTemplateColumns: `4.5rem repeat(${grid.days.length}, minmax(3.5rem, 1fr))`,
+              gridTemplateColumns: `4rem repeat(${grid.days.length}, minmax(2.75rem, 1fr))`,
             }}
           >
-            <div className="sticky left-0 z-30 border-r border-zinc-200 bg-zinc-50 px-2 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <div className="sticky left-0 z-30 border-r border-zinc-200 bg-zinc-100 px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
               Time
             </div>
             {grid.days.map((day) => (
               <div
                 key={day.date}
-                className="px-2 py-3 text-center text-xs font-semibold text-zinc-700 sm:text-sm"
+                className="border-r border-zinc-200 px-1 py-2 text-center text-xs font-medium text-zinc-700 last:border-r-0"
               >
                 <div>{day.shortLabel}</div>
-                <div className="hidden text-zinc-500 sm:block">{day.label}</div>
+                <div className="hidden text-[10px] text-zinc-500 sm:block">
+                  {day.label}
+                </div>
               </div>
             ))}
           </div>
@@ -299,10 +302,10 @@ export default function AvailabilityGrid({
               key={slotInDay}
               className="grid border-b border-zinc-100 last:border-b-0"
               style={{
-                gridTemplateColumns: `4.5rem repeat(${grid.days.length}, minmax(3.5rem, 1fr))`,
+                gridTemplateColumns: `4rem repeat(${grid.days.length}, minmax(2.75rem, 1fr))`,
               }}
             >
-              <div className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-500 sm:text-xs">
+              <div className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-2 py-0 text-[11px] leading-10 text-zinc-500">
                 {grid.timeLabels[slotInDay]}
               </div>
 
@@ -312,33 +315,28 @@ export default function AvailabilityGrid({
                 const count = availabilityCounts[index];
 
                 return (
-                  <button
+                  <div
                     key={`${day.date}-${slotInDay}`}
-                    type="button"
+                    role="button"
+                    tabIndex={canEdit ? 0 : -1}
                     data-slot-index={index}
-                    data-day-index={dayIndex}
-                    data-slot-in-day={slotInDay}
                     aria-label={`${day.label} ${grid.timeLabels[slotInDay]}`}
+                    aria-pressed={canEdit ? selected : undefined}
                     onPointerDown={(pointerEvent) =>
-                      handlePointerDown(
-                        { index, dayIndex, slotInDay },
-                        pointerEvent,
-                      )
+                      startPainting(index, pointerEvent)
                     }
-                    onPointerEnter={(pointerEvent) =>
-                      handlePointerEnter(
-                        { index, dayIndex, slotInDay },
-                        pointerEvent,
-                      )
-                    }
-                    onPointerUp={handlePointerUp}
+                    onPointerEnter={() => showTooltip(index)}
                     onPointerLeave={() => setTooltip(null)}
-                    className="h-11 border-r border-zinc-100 last:border-r-0 sm:h-10"
+                    className={`h-10 border-r border-zinc-100 last:border-r-0 ${
+                      canEdit ? "cursor-crosshair active:opacity-90" : "cursor-default"
+                    }`}
                     style={{
                       backgroundColor:
                         mode === "group"
                           ? heatColor(count, event.participants.length)
-                          : selectionColor(selected),
+                          : selected
+                            ? "#16a34a"
+                            : "#fafafa",
                     }}
                   />
                 );
@@ -349,23 +347,23 @@ export default function AvailabilityGrid({
       </div>
 
       {tooltip ? (
-        <div className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm text-white">
+        <p className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white">
           {tooltip}
-        </div>
+        </p>
       ) : null}
 
-      {mode === "edit" && activeParticipant ? (
+      {mode === "edit" ? (
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={saveAvailability}
             disabled={saving}
-            className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+            className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save availability"}
           </button>
           {saveMessage ? (
-            <span className="text-sm text-zinc-600">{saveMessage}</span>
+            <span className="text-sm text-zinc-500">{saveMessage}</span>
           ) : null}
         </div>
       ) : null}

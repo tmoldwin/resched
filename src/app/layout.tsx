@@ -14,9 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "resched — group scheduling made simple",
-  description:
-    "Find a time that works for everyone with drag-to-select availability and mobile-friendly scheduling grids.",
+  title: "resched",
+  description: "Find a time that works for everyone.",
 };
 
 export default function RootLayout({
@@ -29,15 +28,15 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900">
-        <header className="border-b border-zinc-200/80 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-            <Link href="/" className="text-lg font-semibold tracking-tight text-zinc-900">
+      <body className="flex min-h-full flex-col bg-white text-zinc-900">
+        <header className="border-b border-zinc-200">
+          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+            <Link href="/" className="text-base font-semibold tracking-tight">
               resched
             </Link>
             <Link
               href="/"
-              className="rounded-full border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+              className="text-sm text-zinc-600 transition hover:text-zinc-900"
             >
               New event
             </Link>

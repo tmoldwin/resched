@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafafa;
+  --background: #ffffff;
   --foreground: #18181b;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --accent: #16a34a;
 }
 
 @theme inline {
@@ -15,7 +18,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
 * {
@@ -25,4 +28,9 @@ body {
 button,
 input {
   font: inherit;
+}
+
+input[type="date"],
+input[type="time"] {
+  color-scheme: light;
 }
