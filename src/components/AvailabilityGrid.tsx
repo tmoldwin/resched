@@ -37,7 +37,8 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
-const PAINT_THRESHOLD_PX = 10;
+const LONG_PRESS_MS = 350;
+const SCROLL_CANCEL_PX = 10;
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
@@ -176,7 +177,9 @@ export default function AvailabilityGrid({
     index: number;
     x: number;
     y: number;
+    pointerId: number;
   } | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasName = Boolean(activeParticipant?.name.trim());
   const canPaint = mode === "edit" && hasName;
@@ -275,15 +278,24 @@ export default function AvailabilityGrid({
     [grid.slotsPerDay],
   );
 
+  const clearPendingTouch = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    pendingPointerRef.current = null;
+  }, []);
+
   const stopPainting = useCallback(() => {
     paintingRef.current = false;
     paintAnchorRef.current = null;
     lastPaintedRef.current = null;
-    pendingPointerRef.current = null;
-  }, []);
+    clearPendingTouch();
+  }, [clearPendingTouch]);
 
   const beginPaint = useCallback(
     (index: number, pointerId: number) => {
+      clearPendingTouch();
       snapshotRef.current = draftSlotsRef.current.slice();
       paintAnchorRef.current = indexToAnchor(index, grid.slotsPerDay);
       paintValueRef.current = !draftSlotsRef.current[index];
@@ -292,7 +304,7 @@ export default function AvailabilityGrid({
       paintRectangle(index);
       gridRef.current?.setPointerCapture(pointerId);
     },
-    [grid.slotsPerDay, paintRectangle],
+    [clearPendingTouch, grid.slotsPerDay, paintRectangle],
   );
 
   const toggleCell = useCallback((index: number) => {
@@ -312,16 +324,9 @@ export default function AvailabilityGrid({
       if (pending && !paintingRef.current) {
         const dx = event.clientX - pending.x;
         const dy = event.clientY - pending.y;
-        if (Math.hypot(dx, dy) < PAINT_THRESHOLD_PX) return;
-
-        pendingPointerRef.current = null;
-
-        if (Math.abs(dy) > Math.abs(dx)) return;
-
-        event.preventDefault();
-        beginPaint(pending.index, event.pointerId);
-        const index = resolveIndexFromPoint(event.clientX, event.clientY);
-        if (index !== null) paintRectangle(index);
+        if (Math.hypot(dx, dy) > SCROLL_CANCEL_PX) {
+          clearPendingTouch();
+        }
         return;
       }
 
@@ -336,9 +341,10 @@ export default function AvailabilityGrid({
       if (pending && !paintingRef.current) {
         const dx = event.clientX - pending.x;
         const dy = event.clientY - pending.y;
-        if (Math.hypot(dx, dy) < PAINT_THRESHOLD_PX) {
+        if (Math.hypot(dx, dy) < SCROLL_CANCEL_PX) {
           toggleCell(pending.index);
         }
+        clearPendingTouch();
       }
       stopPainting();
     }
@@ -348,13 +354,14 @@ export default function AvailabilityGrid({
     window.addEventListener("pointercancel", onPointerEnd);
 
     return () => {
+      clearPendingTouch();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
     };
   }, [
-    beginPaint,
     canPaint,
+    clearPendingTouch,
     paintRectangle,
     resolveIndexFromPoint,
     stopPainting,
@@ -368,11 +375,20 @@ export default function AvailabilityGrid({
     if (!canPaint) return;
 
     if (pointerEvent.pointerType === "touch") {
+      clearPendingTouch();
       pendingPointerRef.current = {
         index,
         x: pointerEvent.clientX,
         y: pointerEvent.clientY,
+        pointerId: pointerEvent.pointerId,
       };
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        const pending = pendingPointerRef.current;
+        if (pending?.index === index) {
+          beginPaint(index, pending.pointerId);
+        }
+      }, LONG_PRESS_MS);
       return;
     }
 
@@ -474,7 +490,7 @@ export default function AvailabilityGrid({
         <p className="text-sm text-zinc-500">
           {mode === "edit"
             ? hasName
-              ? `Click and drag to select a block · ${selectedCount} slots`
+              ? `Click and drag to select · hold and drag on mobile · ${selectedCount} slots`
               : "Enter your name above to mark your availability"
             : contributorCount > 0
               ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
