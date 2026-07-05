@@ -37,6 +37,7 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
+const PAINT_THRESHOLD_PX = 10;
 
 function heatColor(count: number, total: number) {
   if (count <= 0) return EMPTY_COLOR;
@@ -171,6 +172,11 @@ export default function AvailabilityGrid({
   const snapshotRef = useRef<boolean[]>([]);
   const lastPaintedRef = useRef<number | null>(null);
   const draftSlotsRef = useRef(draftSlots);
+  const pendingPointerRef = useRef<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const hasName = Boolean(activeParticipant?.name.trim());
   const canPaint = mode === "edit" && hasName;
@@ -273,19 +279,67 @@ export default function AvailabilityGrid({
     paintingRef.current = false;
     paintAnchorRef.current = null;
     lastPaintedRef.current = null;
+    pendingPointerRef.current = null;
+  }, []);
+
+  const beginPaint = useCallback(
+    (index: number, pointerId: number) => {
+      snapshotRef.current = draftSlotsRef.current.slice();
+      paintAnchorRef.current = indexToAnchor(index, grid.slotsPerDay);
+      paintValueRef.current = !draftSlotsRef.current[index];
+      paintingRef.current = true;
+      lastPaintedRef.current = null;
+      paintRectangle(index);
+      gridRef.current?.setPointerCapture(pointerId);
+    },
+    [grid.slotsPerDay, paintRectangle],
+  );
+
+  const toggleCell = useCallback((index: number) => {
+    setDraftSlots((current) => {
+      const next = current.slice();
+      next[index] = !next[index];
+      return next;
+    });
   }, []);
 
   useEffect(() => {
     if (!canPaint) return;
 
     function onPointerMove(event: PointerEvent) {
+      const pending = pendingPointerRef.current;
+
+      if (pending && !paintingRef.current) {
+        const dx = event.clientX - pending.x;
+        const dy = event.clientY - pending.y;
+        if (Math.hypot(dx, dy) < PAINT_THRESHOLD_PX) return;
+
+        pendingPointerRef.current = null;
+
+        if (Math.abs(dy) > Math.abs(dx)) return;
+
+        event.preventDefault();
+        beginPaint(pending.index, event.pointerId);
+        const index = resolveIndexFromPoint(event.clientX, event.clientY);
+        if (index !== null) paintRectangle(index);
+        return;
+      }
+
       if (!paintingRef.current) return;
       event.preventDefault();
       const index = resolveIndexFromPoint(event.clientX, event.clientY);
       if (index !== null) paintRectangle(index);
     }
 
-    function onPointerEnd() {
+    function onPointerEnd(event: PointerEvent) {
+      const pending = pendingPointerRef.current;
+      if (pending && !paintingRef.current) {
+        const dx = event.clientX - pending.x;
+        const dy = event.clientY - pending.y;
+        if (Math.hypot(dx, dy) < PAINT_THRESHOLD_PX) {
+          toggleCell(pending.index);
+        }
+      }
       stopPainting();
     }
 
@@ -298,7 +352,14 @@ export default function AvailabilityGrid({
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
     };
-  }, [canPaint, paintRectangle, resolveIndexFromPoint, stopPainting]);
+  }, [
+    beginPaint,
+    canPaint,
+    paintRectangle,
+    resolveIndexFromPoint,
+    stopPainting,
+    toggleCell,
+  ]);
 
   function startPainting(
     index: number,
@@ -306,19 +367,17 @@ export default function AvailabilityGrid({
   ) {
     if (!canPaint) return;
 
-    pointerEvent.preventDefault();
-    pointerEvent.stopPropagation();
-
-    snapshotRef.current = draftSlotsRef.current.slice();
-    paintAnchorRef.current = indexToAnchor(index, grid.slotsPerDay);
-    paintValueRef.current = !draftSlotsRef.current[index];
-    paintingRef.current = true;
-    lastPaintedRef.current = null;
-    paintRectangle(index);
-
-    if (gridRef.current) {
-      gridRef.current.setPointerCapture(pointerEvent.pointerId);
+    if (pointerEvent.pointerType === "touch") {
+      pendingPointerRef.current = {
+        index,
+        x: pointerEvent.clientX,
+        y: pointerEvent.clientY,
+      };
+      return;
     }
+
+    pointerEvent.preventDefault();
+    beginPaint(index, pointerEvent.pointerId);
   }
 
   function showTooltip(index: number) {
@@ -443,8 +502,6 @@ export default function AvailabilityGrid({
           className={`overflow-auto rounded-lg border border-zinc-200 bg-white ${
             canPaint ? "select-none" : ""
           } ${!hasName && mode === "edit" ? "opacity-50" : ""}`}
-          style={{ touchAction: canPaint ? "none" : "pan-x pan-y" }}
-          onPointerUp={stopPainting}
         >
         <div className="min-w-max">
           <div
@@ -520,7 +577,7 @@ export default function AvailabilityGrid({
                     onPointerEnter={() => showTooltip(index)}
                     onPointerLeave={() => setTooltip(null)}
                     className={`h-7 border-r sm:h-8 ${
-                      canPaint ? "cursor-cell touch-none" : "cursor-default"
+                      canPaint ? "cursor-cell" : "cursor-default"
                     } last:border-r-0`}
                     style={{
                       ...colors,
