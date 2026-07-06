@@ -1,15 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addDays, todayString } from "@/lib/dates";
+import { addDays, daySpan, todayString } from "@/lib/dates";
+import type { EventResponse } from "@/lib/types";
 
 function timeToMinutes(value: string) {
   const [hours, mins] = value.split(":").map(Number);
   return hours * 60 + mins;
 }
 
-export default function CreateEventForm() {
+function minutesToTime(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+type CreateEventFormProps = {
+  cloneSlug?: string;
+};
+
+export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
   const router = useRouter();
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startDefault = todayString();
@@ -21,7 +32,49 @@ export default function CreateEventForm() {
   const [endTime, setEndTime] = useState("17:00");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [prefillLoading, setPrefillLoading] = useState(Boolean(cloneSlug));
   const [error, setError] = useState("");
+  const [clonedFrom, setClonedFrom] = useState<string | null>(null);
+  const [cloneHasPassword, setCloneHasPassword] = useState(false);
+
+  useEffect(() => {
+    if (!cloneSlug) return;
+
+    async function loadCloneSource() {
+      setPrefillLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch(`/api/events/${cloneSlug}`, { cache: "no-store" });
+        const data = (await response.json()) as EventResponse & { error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not load event to clone.");
+        }
+
+        const span = daySpan(data.startDate, data.endDate);
+        const start = todayString();
+
+        setName(data.name);
+        setStartDate(start);
+        setEndDate(addDays(start, span));
+        setStartTime(minutesToTime(data.dayStartMinutes));
+        setEndTime(minutesToTime(data.dayEndMinutes));
+        setClonedFrom(data.name);
+        setCloneHasPassword(data.locked);
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Could not load event to clone.",
+        );
+      } finally {
+        setPrefillLoading(false);
+      }
+    }
+
+    void loadCloneSource();
+  }, [cloneSlug]);
 
   const previewRange = useMemo(() => {
     return `${startDate} to ${endDate}, ${startTime}–${endTime}`;
@@ -44,6 +97,7 @@ export default function CreateEventForm() {
           dayEndMinutes: timeToMinutes(endTime),
           timezone,
           password: password.trim() || undefined,
+          cloneFromSlug: cloneSlug,
         }),
       });
 
@@ -52,7 +106,7 @@ export default function CreateEventForm() {
         throw new Error(data.error || "Could not create event.");
       }
 
-      router.push(`/e/${data.slug}`);
+      router.push(`/e/${data.slug}/join`);
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -64,11 +118,25 @@ export default function CreateEventForm() {
     }
   }
 
+  if (prefillLoading) {
+    return (
+      <div className="card">
+        <p className="text-sm text-zinc-500">Loading event settings…</p>
+      </div>
+    );
+  }
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="max-w-lg space-y-5 rounded-xl border border-zinc-200 p-5 shadow-sm sm:p-6"
-    >
+    <form onSubmit={handleSubmit} className="card space-y-5">
+      {clonedFrom ? (
+        <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+          Cloned from <span className="font-medium text-zinc-800">{clonedFrom}</span>.
+          {cloneHasPassword
+            ? " Password copied from the original."
+            : " No password on the original."}
+        </p>
+      ) : null}
+
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-zinc-800" htmlFor="name">
           Event name
@@ -148,7 +216,12 @@ export default function CreateEventForm() {
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-zinc-800" htmlFor="password">
-          Password <span className="font-normal text-zinc-500">(optional)</span>
+          Password{" "}
+          <span className="font-normal text-zinc-500">
+            {cloneSlug && cloneHasPassword
+              ? "(optional — overrides cloned password)"
+              : "(optional)"}
+          </span>
         </label>
         <input
           id="password"
@@ -165,9 +238,11 @@ export default function CreateEventForm() {
 
       {error ? <p className="notice-error">{error}</p> : null}
 
-      <button type="submit" disabled={loading} className="btn-primary w-full">
-        {loading ? "Creating…" : "Create event"}
-      </button>
+      <div className="form-submit">
+        <button type="submit" disabled={loading} className="btn-primary">
+          {loading ? "Creating…" : "Create event"}
+        </button>
+      </div>
     </form>
   );
 }

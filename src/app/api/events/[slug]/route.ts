@@ -71,3 +71,35 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Failed to load event." }, { status: 500 });
   }
 }
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  try {
+    const userId = await getSessionUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    }
+
+    const { slug } = await context.params;
+
+    const [event] = await getDb()
+      .select()
+      .from(events)
+      .where(eq(events.slug, slug))
+      .limit(1);
+
+    if (!event) {
+      return NextResponse.json({ error: "Event not found." }, { status: 404 });
+    }
+
+    if (event.creatorId !== userId) {
+      return NextResponse.json({ error: "Only the creator can delete this event." }, { status: 403 });
+    }
+
+    await getDb().delete(events).where(eq(events.id, event.id));
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Could not delete event." }, { status: 500 });
+  }
+}

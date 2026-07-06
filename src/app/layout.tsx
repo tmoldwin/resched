@@ -41,6 +41,17 @@ export default function RootLayout({
             </div>
           </header>
           <main className="flex-1">{children}</main>
+          <footer className="border-t border-zinc-200">
+            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 py-4 text-sm text-zinc-500">
+              <Link href="/privacy" className="hover:text-zinc-900">
+                Privacy Policy
+              </Link>
+              <span aria-hidden="true">·</span>
+              <Link href="/terms" className="hover:text-zinc-900">
+                Terms of Service
+              </Link>
+            </div>
+          </footer>
         </SessionProvider>
       </body>
     </html>

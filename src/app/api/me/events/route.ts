@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, participants } from "@/lib/db/schema";
@@ -38,12 +38,7 @@ export async function GET() {
       })
       .from(participants)
       .innerJoin(events, eq(participants.eventId, events.id))
-      .where(
-        and(
-          eq(participants.userId, userId),
-          or(isNull(events.creatorId), ne(events.creatorId, userId)),
-        ),
-      )
+      .where(eq(participants.userId, userId))
       .orderBy(sql`${participants.updatedAt} desc`);
 
     const allEventIds = [

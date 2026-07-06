@@ -1,34 +1,28 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import AvailabilityGrid from "@/components/AvailabilityGrid";
-import GoogleSignInButton from "@/components/GoogleSignInButton";
+import {
+  clearStoredUnlock,
+  getStoredSession,
+  getStoredUnlockPassword,
+  hasEventIdentity,
+  setStoredSession,
+  setStoredUnlockPassword,
+  type StoredSession,
+} from "@/lib/event-session";
 import type { EventResponse, ParticipantResponse } from "@/lib/types";
 
 type EventPageProps = {
   slug: string;
+  initialView?: "edit" | "group";
 };
 
-function storageKey(slug: string) {
-  return `resched:${slug}:session`;
-}
-
-function unlockKey(slug: string) {
-  return `resched:${slug}:unlocked`;
-}
-
-function passwordKey(slug: string) {
-  return `resched:${slug}:password`;
-}
-
-type StoredSession = {
-  editToken: string;
-  participantId: string;
-  name: string;
-};
-
-export default function EventPage({ slug }: EventPageProps) {
+export default function EventPage({ slug, initialView = "edit" }: EventPageProps) {
+  const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,9 +36,9 @@ export default function EventPage({ slug }: EventPageProps) {
   const [unlockError, setUnlockError] = useState("");
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [identityChecked, setIdentityChecked] = useState(false);
 
   const isGoogleUser = Boolean(session?.user?.id);
-  const nameLocked = isGoogleUser;
 
   const loadEvent = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -80,49 +74,76 @@ export default function EventPage({ slug }: EventPageProps) {
   }, [loadEvent]);
 
   useEffect(() => {
-    setShareUrl(window.location.href);
-  }, []);
+    setShareUrl(`${window.location.origin}/e/${slug}`);
+  }, [slug]);
 
   useEffect(() => {
-    if (localStorage.getItem(unlockKey(slug)) === "1") {
+    const password = getStoredUnlockPassword(slug);
+    if (password) {
+      setStoredPassword(password);
       setUnlocked(true);
-      setStoredPassword(sessionStorage.getItem(passwordKey(slug)));
     }
   }, [slug]);
 
   useEffect(() => {
-    if (!event) return;
+    if (!event || sessionStatus === "loading") return;
 
     if (event.myParticipant) {
       setEditToken(event.myParticipant.editToken);
       setParticipantId(event.myParticipant.id);
       setName(event.myParticipant.name);
-      const sessionData: StoredSession = {
+      setStoredSession(slug, {
         editToken: event.myParticipant.editToken,
         participantId: event.myParticipant.id,
         name: event.myParticipant.name,
-      };
-      localStorage.setItem(storageKey(slug), JSON.stringify(sessionData));
+      });
+      setIdentityChecked(true);
+      return;
+    }
+
+    const stored = getStoredSession(slug);
+    if (stored) {
+      setEditToken(stored.editToken ?? null);
+      setParticipantId(stored.participantId ?? null);
+      setName(stored.name);
+      setIdentityChecked(true);
       return;
     }
 
     if (isGoogleUser && session?.user?.name) {
       setName(session.user.name);
+      setIdentityChecked(true);
       return;
     }
 
-    const raw = localStorage.getItem(storageKey(slug));
-    if (raw) {
-      try {
-        const stored = JSON.parse(raw) as StoredSession;
-        setEditToken(stored.editToken);
-        setParticipantId(stored.participantId);
-        setName(stored.name);
-      } catch {
-        localStorage.removeItem(storageKey(slug));
-      }
+    setIdentityChecked(true);
+  }, [event, isGoogleUser, session?.user?.name, sessionStatus, slug]);
+
+  useEffect(() => {
+    if (!identityChecked || loading || sessionStatus === "loading" || !event) return;
+    if (event.locked && !unlocked) return;
+
+    const identity = hasEventIdentity({
+      storedSession: getStoredSession(slug),
+      myParticipant: Boolean(event.myParticipant),
+      googleName: isGoogleUser ? session?.user?.name : null,
+    });
+
+    if (!identity && !name.trim()) {
+      router.replace(`/e/${slug}/join`);
     }
-  }, [event, isGoogleUser, session?.user?.name, slug]);
+  }, [
+    event,
+    identityChecked,
+    isGoogleUser,
+    loading,
+    name,
+    router,
+    session?.user?.name,
+    sessionStatus,
+    slug,
+    unlocked,
+  ]);
 
   const activeParticipant = useMemo<ParticipantResponse | null>(() => {
     if (!event) return null;
@@ -154,7 +175,7 @@ export default function EventPage({ slug }: EventPageProps) {
       participantId: participant.id,
       name: participant.name,
     };
-    localStorage.setItem(storageKey(slug), JSON.stringify(sessionData));
+    setStoredSession(slug, sessionData);
     setEditToken(participant.editToken);
     setParticipantId(participant.id);
     setName(participant.name);
@@ -176,8 +197,7 @@ export default function EventPage({ slug }: EventPageProps) {
         throw new Error(data.error || "Invalid password.");
       }
 
-      localStorage.setItem(unlockKey(slug), "1");
-      sessionStorage.setItem(passwordKey(slug), passwordInput);
+      setStoredUnlockPassword(slug, passwordInput);
       setStoredPassword(passwordInput);
       setUnlocked(true);
     } catch (unlockFailure) {
@@ -189,24 +209,40 @@ export default function EventPage({ slug }: EventPageProps) {
     }
   }
 
+  function handlePasswordRejected() {
+    clearStoredUnlock(slug);
+    setStoredPassword(null);
+    setPasswordInput("");
+    setUnlocked(false);
+    setUnlockError("The saved password no longer works — please enter it again.");
+  }
+
   async function copyLink() {
-    await navigator.clipboard.writeText(window.location.href);
+    await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }
 
-  if (loading || sessionStatus === "loading") {
+  if (loading || sessionStatus === "loading" || !identityChecked) {
     return (
-      <div className="mx-auto flex min-h-[40vh] max-w-3xl items-center justify-center px-4">
+      <div className="page-shell flex min-h-[40vh] items-center justify-center">
         <p className="text-sm text-zinc-500">Loading event…</p>
+      </div>
+    );
+  }
+
+  if (identityChecked && event && !name.trim() && !event.myParticipant && !(isGoogleUser && session?.user?.name)) {
+    return (
+      <div className="page-shell flex min-h-[40vh] items-center justify-center">
+        <p className="text-sm text-zinc-500">Redirecting…</p>
       </div>
     );
   }
 
   if (error || !event) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-xl font-semibold">Event not found</h1>
+      <div className="page-shell py-16 text-center">
+        <h1 className="page-title">Event not found</h1>
         <p className="mt-2 text-sm text-zinc-500">
           {error || "This link may be invalid."}
         </p>
@@ -216,92 +252,74 @@ export default function EventPage({ slug }: EventPageProps) {
 
   if (event.locked && !unlocked) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16">
-        <div className="rounded-xl border border-zinc-200 p-6 shadow-sm">
-          <h1 className="text-xl font-semibold">{event.name}</h1>
-          <p className="mt-1 text-sm text-zinc-500">Password required</p>
-          <div className="mt-5 space-y-3">
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(inputEvent) => setPasswordInput(inputEvent.target.value)}
-              placeholder="Password"
-              className="field-input"
-            />
-            {unlockError ? (
-              <p className="notice-error">{unlockError}</p>
-            ) : null}
-            <button type="button" onClick={unlockEvent} className="btn-primary w-full">
-              Continue
-            </button>
+      <div className="page-shell flex min-h-[50vh] items-center justify-center">
+        <div className="card w-full max-w-md space-y-5">
+          <div>
+            <h1 className="text-xl font-semibold">{event.name}</h1>
+            <p className="mt-1 text-sm text-zinc-500">Enter the event password to continue</p>
           </div>
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={(inputEvent) => setPasswordInput(inputEvent.target.value)}
+            placeholder="Password"
+            className="field-input"
+          />
+          {unlockError ? <p className="notice-error">{unlockError}</p> : null}
+          <button type="button" onClick={unlockEvent} className="btn-primary w-full">
+            Continue
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:py-8">
+    <div className="page-shell space-y-8">
       <section className="space-y-5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {event.name}
-          </h1>
+          <h1 className="page-title">{event.name}</h1>
           <p className="mt-1.5 text-sm text-zinc-500">
             {event.startDate} to {event.endDate} · {event.timezone}
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-zinc-600">
+            Editing as <span className="font-medium text-zinc-900">{name}</span>
+            {!isGoogleUser ? (
+              <>
+                {" · "}
+                <Link
+                  href={`/e/${slug}/join?change=1`}
+                  className="text-zinc-700 underline-offset-2 hover:underline"
+                >
+                  Change
+                </Link>
+              </>
+            ) : null}
+          </p>
+          <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+            {event.participants.length} response
+            {event.participants.length === 1 ? "" : "s"}
+          </span>
         </div>
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-zinc-800" htmlFor="share-link">
             Share link
           </label>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="input-group">
             <input
               id="share-link"
               readOnly
               value={shareUrl}
-              className="field-input-readonly min-w-0 flex-1"
+              className="field-input-readonly"
             />
-            <button type="button" onClick={copyLink} className="btn-secondary shrink-0">
+            <button type="button" onClick={copyLink} className="btn-secondary">
               {copied ? "Copied" : "Copy link"}
             </button>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-sm font-medium text-zinc-800" htmlFor="participant-name">
-              Your name
-            </label>
-            <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
-              {event.participants.length} response
-              {event.participants.length === 1 ? "" : "s"}
-            </span>
-          </div>
-
-          {!isGoogleUser ? (
-            <GoogleSignInButton
-              callbackUrl={shareUrl || `/e/${slug}`}
-              label="Continue with Google"
-            />
-          ) : null}
-
-          <input
-            id="participant-name"
-            value={name}
-            onChange={(inputEvent) => setName(inputEvent.target.value)}
-            placeholder="Add your name"
-            readOnly={nameLocked}
-            className={nameLocked ? "field-input-readonly" : "field-input"}
-          />
-          {nameLocked ? (
-            <p className="text-xs text-zinc-500">Signed in with Google</p>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              Or enter your name manually above
-            </p>
-          )}
         </div>
       </section>
 
@@ -311,6 +329,8 @@ export default function EventPage({ slug }: EventPageProps) {
         editToken={editToken}
         password={event.locked ? storedPassword || passwordInput : null}
         onSaved={handleSaved}
+        onPasswordRejected={handlePasswordRejected}
+        initialMode={initialView}
       />
     </div>
   );

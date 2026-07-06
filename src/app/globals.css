@@ -31,15 +31,86 @@ body {
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-10 items-center justify-center rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-google {
-    @apply inline-flex items-center justify-center gap-2.5 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-10 items-center justify-center gap-2.5 rounded-lg border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-red-200 bg-white px-5 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .segmented {
+    @apply grid w-full grid-cols-2 gap-1 rounded-lg border border-zinc-200 bg-zinc-100/80 p-1 sm:inline-flex sm:w-auto;
+  }
+
+  .segmented-item {
+    @apply rounded-md px-4 py-2 text-center text-sm font-medium transition sm:px-5;
+  }
+
+  .segmented-item-active {
+    @apply bg-white text-zinc-900 shadow-sm;
+  }
+
+  .segmented-item-inactive {
+    @apply text-zinc-600 hover:text-zinc-900;
+  }
+
+  .form-submit {
+    @apply flex pt-2;
+  }
+
+  .form-submit .btn-primary,
+  .form-submit .btn-secondary {
+    @apply w-full sm:ml-auto sm:w-auto sm:min-w-44;
+  }
+
+  .btn-stack {
+    @apply flex w-full flex-col gap-2;
+  }
+
+  .form-footer {
+    @apply flex flex-col gap-3 border-t border-zinc-200 pt-5 sm:flex-row sm:items-center sm:justify-end;
+  }
+
+  .form-footer .btn-primary {
+    @apply w-full sm:w-auto sm:min-w-44;
+  }
+
+  .action-bar {
+    @apply grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:justify-end;
+  }
+
+  .action-bar .btn-secondary,
+  .action-bar .btn-danger,
+  .action-bar a.btn-secondary {
+    @apply w-full sm:w-auto;
+  }
+
+  .action-bar-3 {
+    @apply grid-cols-2 sm:flex;
+  }
+
+  .action-bar-3 > :last-child {
+    @apply col-span-2 sm:col-span-1;
+  }
+
+  .input-group {
+    @apply flex flex-col gap-2 sm:flex-row sm:items-stretch;
+  }
+
+  .input-group .field-input-readonly {
+    @apply min-w-0 flex-1;
+  }
+
+  .input-group .btn-secondary {
+    @apply w-full shrink-0 sm:w-auto;
   }
 
   .notice-success {
@@ -48,6 +119,46 @@ body {
 
   .notice-error {
     @apply rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700;
+  }
+
+  .page-shell {
+    @apply mx-auto max-w-3xl px-4 py-8 sm:py-10;
+  }
+
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl;
+  }
+
+  .page-lead {
+    @apply text-base leading-7 text-zinc-600;
+  }
+
+  .section-label {
+    @apply text-xs font-medium uppercase tracking-wide text-zinc-500;
+  }
+
+  .card {
+    @apply rounded-xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6;
+  }
+
+  .legal-prose {
+    @apply max-w-none text-base leading-7 text-zinc-700;
+  }
+
+  .legal-prose h2 {
+    @apply mt-8 mb-3 text-lg font-semibold text-zinc-900;
+  }
+
+  .legal-prose p {
+    @apply mb-4;
+  }
+
+  .legal-prose ul {
+    @apply mb-4 list-disc space-y-2 pl-5;
+  }
+
+  .legal-prose strong {
+    @apply font-medium text-zinc-900;
   }
 }
 

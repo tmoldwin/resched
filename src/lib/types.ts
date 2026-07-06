@@ -33,6 +33,7 @@ export type CreateEventPayload = {
   timezone: string;
   slotMinutes: number;
   password?: string;
+  cloneFromSlug?: string;
 };
 
 export type UserEventSummary = {

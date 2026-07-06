@@ -26,6 +26,8 @@ type AvailabilityGridProps = {
   editToken?: string | null;
   password?: string | null;
   onSaved?: (participant: ParticipantResponse & { editToken: string }) => void;
+  onPasswordRejected?: () => void;
+  initialMode?: "edit" | "group";
 };
 
 type PaintAnchor = {
@@ -94,7 +96,7 @@ function gridColumns(dayCount: number) {
 function cellColors(
   index: number,
   selected: boolean,
-  draftSlots: boolean[],
+  _draftSlots: boolean[],
   grid: SlotGridMeta,
   mode: "edit" | "group",
   count: number,
@@ -102,7 +104,7 @@ function cellColors(
   dayStartMinutes: number,
   slotMinutes: number,
 ) {
-  const { dayIndex, slotInDay } = indexToAnchor(index, grid.slotsPerDay);
+  const { slotInDay } = indexToAnchor(index, grid.slotsPerDay);
   const startMinutes = slotStartMinutes(dayStartMinutes, slotInDay, slotMinutes);
   const lineColor = rowBorderColor(startMinutes);
   const backgroundColor =
@@ -112,38 +114,10 @@ function cellColors(
         ? SELECTED_COLOR
         : EMPTY_COLOR;
 
-  const aboveSelected =
-    slotInDay > 0 &&
-    draftSlots[slotIndex(dayIndex, slotInDay - 1, grid.slotsPerDay)];
-  const topColor =
-    mode === "edit" && selected && aboveSelected ? SELECTED_COLOR : lineColor;
-
-  if (mode !== "edit" || !selected) {
-    return {
-      backgroundColor,
-      borderTopColor: topColor,
-      borderRightColor: DAY_LINE,
-    };
-  }
-
-  const rightSelected =
-    dayIndex + 1 < grid.days.length &&
-    draftSlots[slotIndex(dayIndex + 1, slotInDay, grid.slotsPerDay)];
-  const belowSelected =
-    slotInDay + 1 < grid.slotsPerDay &&
-    draftSlots[slotIndex(dayIndex, slotInDay + 1, grid.slotsPerDay)];
-  const belowStart = slotStartMinutes(dayStartMinutes, slotInDay + 1, slotMinutes);
-  const belowLine = belowSelected
-    ? SELECTED_COLOR
-    : slotInDay + 1 < grid.slotsPerDay
-      ? rowBorderColor(belowStart)
-      : lineColor;
-
   return {
     backgroundColor,
-    borderTopColor: topColor,
-    borderRightColor: rightSelected ? SELECTED_COLOR : DAY_LINE,
-    borderBottomColor: belowLine,
+    borderTopColor: lineColor,
+    borderRightColor: DAY_LINE,
   };
 }
 
@@ -153,6 +127,8 @@ export default function AvailabilityGrid({
   editToken,
   password,
   onSaved,
+  onPasswordRejected,
+  initialMode = "edit",
 }: AvailabilityGridProps) {
   const grid = useMemo(
     () =>
@@ -166,7 +142,7 @@ export default function AvailabilityGrid({
     [event],
   );
 
-  const [mode, setMode] = useState<"edit" | "group">("edit");
+  const [mode, setMode] = useState<"edit" | "group">(initialMode);
   const [draftSlots, setDraftSlots] = useState<boolean[]>(() =>
     normalizeSlots(activeParticipant?.slots ?? [], grid.totalSlots),
   );
@@ -185,8 +161,7 @@ export default function AvailabilityGrid({
   const draftSlotsRef = useRef(draftSlots);
   const touchInteractionRef = useRef(false);
 
-  const hasName = Boolean(activeParticipant?.name.trim());
-  const canPaint = mode === "edit" && hasName;
+  const canPaint = mode === "edit";
 
   useEffect(() => {
     setTooltip(null);
@@ -468,6 +443,11 @@ export default function AvailabilityGrid({
         error?: string;
       };
 
+      if (response.status === 401) {
+        onPasswordRejected?.();
+        throw new Error(data.error || "Invalid password.");
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "Could not save availability.");
       }
@@ -500,40 +480,34 @@ export default function AvailabilityGrid({
     <section className="space-y-4 border-t border-zinc-200 pt-6">
       {saveNotice === "success" && mode === "group" ? (
         <p className="notice-success" role="status">
-          Availability saved. You&apos;re now viewing group overlap.
+          Availability saved. You&apos;re now viewing all responses.
         </p>
       ) : null}
 
-      <div className="inline-flex self-start rounded-lg border border-zinc-200 bg-white p-0.5">
-          <button
-            type="button"
-            onClick={() => setMode("edit")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              mode === "edit"
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            Your times
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("group")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              mode === "group"
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            Group view
-          </button>
-        </div>
+      <div className="segmented">
+        <button
+          type="button"
+          onClick={() => setMode("edit")}
+          className={`segmented-item ${
+            mode === "edit" ? "segmented-item-active" : "segmented-item-inactive"
+          }`}
+        >
+          Edit responses
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("group")}
+          className={`segmented-item ${
+            mode === "group" ? "segmented-item-active" : "segmented-item-inactive"
+          }`}
+        >
+          View responses
+        </button>
+      </div>
 
       <p className="text-sm text-zinc-500">
         {mode === "edit"
-          ? hasName
-            ? `Drag to select times · swipe side margins to scroll · ${selectedCount} slots selected`
-            : "Enter your name above to mark your availability"
+          ? `Drag to select times · swipe side margins to scroll · ${selectedCount} slots selected`
           : contributorCount > 0
             ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"} · tap a slot for details`
             : "No responses yet — mark your times and save"}
@@ -546,18 +520,8 @@ export default function AvailabilityGrid({
 
         <div
           ref={gridRef}
-          className={`relative min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white ${
-            !hasName && mode === "edit" ? "opacity-50" : ""
-          }`}
+          className="relative min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white"
         >
-          {!hasName && mode === "edit" ? (
-            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-zinc-100/80 backdrop-blur-[1px]">
-              <p className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 shadow-sm">
-                Enter your name
-              </p>
-            </div>
-          ) : null}
-
           <div
             className="sticky top-0 z-20 grid w-full border-b-2 border-zinc-300 bg-zinc-100/90 backdrop-blur"
             style={{ gridTemplateColumns: columnTemplate }}
@@ -634,7 +598,6 @@ export default function AvailabilityGrid({
                         : ""
                     }`}
                     aria-pressed={canPaint ? selected : undefined}
-                    aria-disabled={!canPaint && mode === "edit"}
                     onPointerDown={(pointerEvent) => {
                       if (mode === "group") {
                         inspectGroupSlot(index, pointerEvent);
@@ -682,7 +645,7 @@ export default function AvailabilityGrid({
                       ...colors,
                       borderTopWidth: 1,
                       borderRightWidth: 1,
-                      borderBottomWidth: colors.borderBottomColor ? 1 : 0,
+                      borderBottomWidth: 0,
                       borderStyle: "solid",
                       WebkitTapHighlightColor: "transparent",
                       ...(isGroupFocused
@@ -718,10 +681,10 @@ export default function AvailabilityGrid({
         </div>
       ) : null}
 
-      {mode === "edit" && hasName ? (
-        <div className="space-y-2">
+      {mode === "edit" ? (
+        <div className="form-footer">
           {saveNotice === "error" && saveMessage ? (
-            <p className="notice-error" role="alert">
+            <p className="notice-error sm:mr-auto sm:flex-1" role="alert">
               {saveMessage}
             </p>
           ) : null}
@@ -729,7 +692,7 @@ export default function AvailabilityGrid({
             type="button"
             onClick={saveAvailability}
             disabled={saving}
-            className="btn-primary w-full"
+            className="btn-primary"
           >
             {saving ? "Saving…" : "Save availability"}
           </button>
