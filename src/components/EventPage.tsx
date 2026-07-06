@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import AvailabilityGrid from "@/components/AvailabilityGrid";
 import {
   clearStoredUnlock,
   getStoredSession,
   getStoredUnlockPassword,
-  hasEventIdentity,
+  resolveEventIdentity,
   setStoredSession,
   setStoredUnlockPassword,
   type StoredSession,
@@ -36,9 +36,26 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
   const [unlockError, setUnlockError] = useState("");
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
-  const [identityChecked, setIdentityChecked] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
 
   const isGoogleUser = Boolean(session?.user?.id);
+
+  useLayoutEffect(() => {
+    const password = getStoredUnlockPassword(slug);
+    if (password) {
+      setStoredPassword(password);
+      setUnlocked(true);
+    }
+
+    const stored = getStoredSession(slug);
+    if (stored) {
+      setEditToken(stored.editToken ?? null);
+      setParticipantId(stored.participantId ?? null);
+      setName(stored.name);
+    }
+
+    setClientReady(true);
+  }, [slug]);
 
   const loadEvent = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -78,14 +95,6 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
   }, [slug]);
 
   useEffect(() => {
-    const password = getStoredUnlockPassword(slug);
-    if (password) {
-      setStoredPassword(password);
-      setUnlocked(true);
-    }
-  }, [slug]);
-
-  useEffect(() => {
     if (!event || sessionStatus === "loading") return;
 
     if (event.myParticipant) {
@@ -97,63 +106,43 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
         participantId: event.myParticipant.id,
         name: event.myParticipant.name,
       });
-      setIdentityChecked(true);
-      return;
-    }
-
-    const stored = getStoredSession(slug);
-    if (stored) {
-      setEditToken(stored.editToken ?? null);
-      setParticipantId(stored.participantId ?? null);
-      setName(stored.name);
-      setIdentityChecked(true);
       return;
     }
 
     if (isGoogleUser && session?.user?.name) {
       setName(session.user.name);
-      setIdentityChecked(true);
-      return;
     }
-
-    setIdentityChecked(true);
   }, [event, isGoogleUser, session?.user?.name, sessionStatus, slug]);
 
-  useEffect(() => {
-    if (!identityChecked || loading || sessionStatus === "loading" || !event) return;
-    if (event.locked && !unlocked) return;
+  const identity = useMemo(
+    () =>
+      resolveEventIdentity(slug, event, {
+        googleName: isGoogleUser ? session?.user?.name : null,
+      }),
+    [event, isGoogleUser, session?.user?.name, slug, clientReady],
+  );
 
-    const identity = hasEventIdentity({
-      storedSession: getStoredSession(slug),
-      myParticipant: Boolean(event.myParticipant),
-      googleName: isGoogleUser ? session?.user?.name : null,
-    });
+  const appReady =
+    clientReady && !loading && sessionStatus !== "loading" && Boolean(event);
 
-    if (!identity && !name.trim()) {
-      router.replace(`/e/${slug}/join`);
-    }
-  }, [
-    event,
-    identityChecked,
-    isGoogleUser,
-    loading,
-    name,
-    router,
-    session?.user?.name,
-    sessionStatus,
-    slug,
-    unlocked,
-  ]);
+  const needsJoin = appReady && !identity.hasIdentity;
+
+  useLayoutEffect(() => {
+    if (!needsJoin) return;
+    router.replace(`/e/${slug}/join`);
+  }, [needsJoin, router, slug]);
 
   const activeParticipant = useMemo<ParticipantResponse | null>(() => {
     if (!event) return null;
+
+    const displayName = identity.name || name;
 
     if (participantId) {
       const existing = event.participants.find(
         (participant) => participant.id === participantId,
       );
       if (existing) {
-        return { ...existing, name: name || existing.name };
+        return { ...existing, name: displayName || existing.name };
       }
     }
 
@@ -163,11 +152,11 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
 
     return {
       id: "draft",
-      name,
+      name: displayName,
       slots: [],
       updatedAt: new Date().toISOString(),
     };
-  }, [event, participantId, name]);
+  }, [event, identity.name, name, participantId]);
 
   function handleSaved(participant: ParticipantResponse & { editToken: string }) {
     const sessionData: StoredSession = {
@@ -223,18 +212,10 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
     window.setTimeout(() => setCopied(false), 2000);
   }
 
-  if (loading || sessionStatus === "loading" || !identityChecked) {
+  if (!clientReady || loading || sessionStatus === "loading") {
     return (
       <div className="page-shell flex min-h-[40vh] items-center justify-center">
         <p className="text-sm text-zinc-500">Loading event…</p>
-      </div>
-    );
-  }
-
-  if (identityChecked && event && !name.trim() && !event.myParticipant && !(isGoogleUser && session?.user?.name)) {
-    return (
-      <div className="page-shell flex min-h-[40vh] items-center justify-center">
-        <p className="text-sm text-zinc-500">Redirecting…</p>
       </div>
     );
   }
@@ -246,6 +227,14 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
         <p className="mt-2 text-sm text-zinc-500">
           {error || "This link may be invalid."}
         </p>
+      </div>
+    );
+  }
+
+  if (needsJoin) {
+    return (
+      <div className="page-shell flex min-h-[40vh] items-center justify-center">
+        <p className="text-sm text-zinc-500">Loading…</p>
       </div>
     );
   }
@@ -286,7 +275,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-zinc-600">
-            Editing as <span className="font-medium text-zinc-900">{name}</span>
+            Editing as <span className="font-medium text-zinc-900">{identity.name || name}</span>
             {!isGoogleUser ? (
               <>
                 {" · "}

@@ -81,3 +81,62 @@ export function hasEventIdentity(options: {
   if (options.googleName?.trim()) return true;
   return Boolean(options.storedSession?.name.trim());
 }
+
+export type ResolvedIdentity = {
+  hasIdentity: boolean;
+  name: string;
+  editToken: string | null;
+  participantId: string | null;
+};
+
+export function resolveEventIdentity(
+  slug: string,
+  event: {
+    myParticipant?: {
+      id: string;
+      name: string;
+      editToken: string;
+    } | null;
+  } | null,
+  options: { googleName?: string | null },
+): ResolvedIdentity {
+  const empty: ResolvedIdentity = {
+    hasIdentity: false,
+    name: "",
+    editToken: null,
+    participantId: null,
+  };
+
+  if (!event || typeof window === "undefined") return empty;
+
+  if (event.myParticipant) {
+    return {
+      hasIdentity: true,
+      name: event.myParticipant.name,
+      editToken: event.myParticipant.editToken,
+      participantId: event.myParticipant.id,
+    };
+  }
+
+  const stored = getStoredSession(slug);
+  if (stored) {
+    return {
+      hasIdentity: true,
+      name: stored.name,
+      editToken: stored.editToken ?? null,
+      participantId: stored.participantId ?? null,
+    };
+  }
+
+  const googleName = options.googleName?.trim();
+  if (googleName) {
+    return {
+      hasIdentity: true,
+      name: googleName,
+      editToken: null,
+      participantId: null,
+    };
+  }
+
+  return empty;
+}

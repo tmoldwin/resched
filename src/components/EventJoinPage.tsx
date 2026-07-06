@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 import {
   getStoredSession,
   getStoredUnlockPassword,
+  resolveEventIdentity,
   setStoredSession,
   setStoredUnlockPassword,
 } from "@/lib/event-session";
@@ -29,9 +30,23 @@ export default function EventJoinPage({ slug }: EventJoinPageProps) {
   const [passwordInput, setPasswordInput] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [unlockError, setUnlockError] = useState("");
+  const [clientReady, setClientReady] = useState(false);
 
   const isGoogleUser = Boolean(session?.user?.id);
   const nameLocked = isGoogleUser;
+
+  useLayoutEffect(() => {
+    if (getStoredUnlockPassword(slug)) {
+      setUnlocked(true);
+    }
+
+    const stored = getStoredSession(slug);
+    if (stored?.name) {
+      setName(stored.name);
+    }
+
+    setClientReady(true);
+  }, [slug]);
 
   useEffect(() => {
     async function loadEvent() {
@@ -59,49 +74,52 @@ export default function EventJoinPage({ slug }: EventJoinPageProps) {
     void loadEvent();
   }, [slug]);
 
-  useEffect(() => {
-    if (getStoredUnlockPassword(slug)) {
-      setUnlocked(true);
-    }
-  }, [slug]);
+  const identity = useMemo(
+    () =>
+      resolveEventIdentity(slug, event, {
+        googleName: isGoogleUser ? session?.user?.name : null,
+      }),
+    [event, isGoogleUser, session?.user?.name, slug, clientReady],
+  );
 
-  useEffect(() => {
-    if (sessionStatus === "loading" || loading || !event) return;
-    if (event.locked && !unlocked) return;
+  const appReady =
+    clientReady && !loading && sessionStatus !== "loading" && Boolean(event);
 
-    if (event.myParticipant) {
-      router.replace(`/e/${slug}`);
-      return;
-    }
+  const needsEvent =
+    appReady &&
+    !isChangingName &&
+    identity.hasIdentity &&
+    (!event?.locked || unlocked);
 
-    const stored = getStoredSession(slug);
+  useLayoutEffect(() => {
+    if (!needsEvent || !event) return;
 
     if (isGoogleUser && session?.user?.name && !isChangingName) {
+      const stored = getStoredSession(slug);
       setStoredSession(slug, {
         name: session.user.name,
         editToken: stored?.editToken,
         participantId: stored?.participantId,
       });
-      router.replace(`/e/${slug}`);
-      return;
     }
 
-    if (stored?.name) {
-      setName(stored.name);
-    } else if (isGoogleUser && session?.user?.name) {
-      setName(session.user.name);
-    }
+    router.replace(`/e/${slug}`);
   }, [
     event,
     isChangingName,
     isGoogleUser,
-    loading,
+    needsEvent,
     router,
     session?.user?.name,
-    sessionStatus,
     slug,
-    unlocked,
   ]);
+
+  useEffect(() => {
+    if (!appReady || !event || isChangingName) return;
+    if (isGoogleUser && session?.user?.name && !name) {
+      setName(session.user.name);
+    }
+  }, [appReady, event, isChangingName, isGoogleUser, name, session?.user?.name]);
 
   function continueToEvent() {
     const trimmed = name.trim();
@@ -150,7 +168,7 @@ export default function EventJoinPage({ slug }: EventJoinPageProps) {
     }
   }
 
-  if (loading || sessionStatus === "loading") {
+  if (!clientReady || loading || sessionStatus === "loading") {
     return (
       <div className="page-shell flex min-h-[40vh] items-center justify-center">
         <p className="text-sm text-zinc-500">Loading…</p>
@@ -189,6 +207,14 @@ export default function EventJoinPage({ slug }: EventJoinPageProps) {
             Continue
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (needsEvent) {
+    return (
+      <div className="page-shell flex min-h-[40vh] items-center justify-center">
+        <p className="text-sm text-zinc-500">Loading…</p>
       </div>
     );
   }
