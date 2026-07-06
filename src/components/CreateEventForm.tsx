@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, daySpan, todayString } from "@/lib/dates";
+import { markLocallyCreated } from "@/lib/event-claims";
 import type { EventResponse } from "@/lib/types";
 
 function timeToMinutes(value: string) {
@@ -104,6 +105,10 @@ export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
       const data = (await response.json()) as { slug?: string; error?: string };
       if (!response.ok) {
         throw new Error(data.error || "Could not create event.");
+      }
+
+      if (data.slug) {
+        markLocallyCreated(data.slug);
       }
 
       router.push(`/e/${data.slug}/join`);

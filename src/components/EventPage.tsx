@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import AvailabilityGrid from "@/components/AvailabilityGrid";
 import {
@@ -37,6 +37,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [clientReady, setClientReady] = useState(false);
+  const [identityEstablished, setIdentityEstablished] = useState(false);
 
   const isGoogleUser = Boolean(session?.user?.id);
 
@@ -75,10 +76,13 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
       }
 
       setEvent(data);
+      setError("");
     } catch (loadError) {
-      setError(
-        loadError instanceof Error ? loadError.message : "Could not load event.",
-      );
+      if (!silent) {
+        setError(
+          loadError instanceof Error ? loadError.message : "Could not load event.",
+        );
+      }
     } finally {
       if (!silent) {
         setLoading(false);
@@ -125,10 +129,25 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
   const appReady =
     clientReady && !loading && sessionStatus !== "loading" && Boolean(event);
 
-  const needsJoin = appReady && !identity.hasIdentity;
+  useEffect(() => {
+    if (
+      identity.hasIdentity ||
+      Boolean(participantId) ||
+      Boolean(editToken) ||
+      Boolean(name.trim())
+    ) {
+      setIdentityEstablished(true);
+    }
+  }, [editToken, identity.hasIdentity, name, participantId]);
+
+  const needsJoin =
+    appReady && !identityEstablished && !identity.hasIdentity;
+
+  const joinRedirectedRef = useRef(false);
 
   useLayoutEffect(() => {
-    if (!needsJoin) return;
+    if (!needsJoin || joinRedirectedRef.current) return;
+    joinRedirectedRef.current = true;
     router.replace(`/e/${slug}/join`);
   }, [needsJoin, router, slug]);
 
@@ -168,7 +187,39 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
     setEditToken(participant.editToken);
     setParticipantId(participant.id);
     setName(participant.name);
-    void loadEvent({ silent: true });
+    setIdentityEstablished(true);
+
+    setEvent((current) => {
+      if (!current) return current;
+
+      const updatedParticipant: ParticipantResponse = {
+        id: participant.id,
+        name: participant.name,
+        slots: participant.slots,
+        updatedAt: participant.updatedAt,
+      };
+
+      const existingIndex = current.participants.findIndex(
+        (item) => item.id === participant.id,
+      );
+      const participants =
+        existingIndex >= 0
+          ? current.participants.map((item, index) =>
+              index === existingIndex ? updatedParticipant : item,
+            )
+          : [...current.participants, updatedParticipant];
+
+      return {
+        ...current,
+        participants,
+        myParticipant: isGoogleUser
+          ? {
+              ...updatedParticipant,
+              editToken: participant.editToken,
+            }
+          : current.myParticipant,
+      };
+    });
   }
 
   async function unlockEvent() {

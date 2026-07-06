@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { UserEventsResponse, UserEventSummary } from "@/lib/types";
+import {
+  claimLocallyCreatedEvents,
+  unmarkLocallyCreated,
+} from "@/lib/event-claims";
 
 function CreatedEventRow({
   event,
@@ -137,6 +141,8 @@ export default function EventsDashboard() {
     setError("");
 
     try {
+      await claimLocallyCreatedEvents();
+
       const response = await fetch("/api/me/events", { cache: "no-store" });
       const payload = (await response.json()) as UserEventsResponse & {
         error?: string;
@@ -180,6 +186,7 @@ export default function EventsDashboard() {
         throw new Error(payload.error || "Could not delete event.");
       }
 
+      unmarkLocallyCreated(slug);
       await loadEvents();
     } catch (deleteError) {
       setError(

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 import {
@@ -91,8 +91,11 @@ export default function EventJoinPage({ slug }: EventJoinPageProps) {
     identity.hasIdentity &&
     (!event?.locked || unlocked);
 
+  const eventRedirectedRef = useRef(false);
+
   useLayoutEffect(() => {
-    if (!needsEvent || !event) return;
+    if (!needsEvent || !event || eventRedirectedRef.current) return;
+    eventRedirectedRef.current = true;
 
     if (isGoogleUser && session?.user?.name && !isChangingName) {
       const stored = getStoredSession(slug);

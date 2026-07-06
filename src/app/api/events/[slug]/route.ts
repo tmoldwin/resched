@@ -80,6 +80,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
 
     const { slug } = await context.params;
+    if (!slug?.trim()) {
+      return NextResponse.json({ error: "Invalid event." }, { status: 400 });
+    }
 
     const [event] = await getDb()
       .select()
@@ -91,11 +94,24 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
 
-    if (event.creatorId !== userId) {
+    if (!event.id || event.creatorId !== userId) {
       return NextResponse.json({ error: "Only the creator can delete this event." }, { status: 403 });
     }
 
-    await getDb().delete(events).where(eq(events.id, event.id));
+    const deleted = await getDb()
+      .delete(events)
+      .where(
+        and(
+          eq(events.id, event.id),
+          eq(events.slug, slug),
+          eq(events.creatorId, userId),
+        ),
+      )
+      .returning({ id: events.id });
+
+    if (deleted.length !== 1) {
+      return NextResponse.json({ error: "Could not delete event." }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
