@@ -22,6 +22,8 @@ type EventPageProps = {
   initialView?: "edit" | "group";
 };
 
+const DRAFT_SLOTS: boolean[] = [];
+
 export default function EventPage({ slug, initialView = "edit" }: EventPageProps) {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
@@ -173,7 +175,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
     return {
       id: "draft",
       name: displayName,
-      slots: [],
+      slots: DRAFT_SLOTS,
       updatedAt: "",
     };
   }, [event, identity.name, name, participantId]);

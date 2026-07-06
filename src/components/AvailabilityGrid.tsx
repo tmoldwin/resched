@@ -165,12 +165,15 @@ export default function AvailabilityGrid({
   const pendingPaintRef = useRef<{
     index: number;
     pointerId: number;
+    pointerType: string;
     startX: number;
     startY: number;
     activated: boolean;
   } | null>(null);
+  const hasUnsavedEditsRef = useRef(false);
 
   const PAINT_THRESHOLD_PX = 10;
+  const TOUCH_PAINT_THRESHOLD_PX = 24;
 
   const canPaint = mode === "edit";
 
@@ -207,13 +210,21 @@ export default function AvailabilityGrid({
       window.removeEventListener("pointerdown", onPointerDown, true);
   }, [groupFocusIndex, mode]);
 
-  useEffect(() => {
-    draftSlotsRef.current = draftSlots;
-  }, [draftSlots]);
+  const commitDraftSlots = useCallback((next: boolean[]) => {
+    draftSlotsRef.current = next;
+    hasUnsavedEditsRef.current = true;
+    setDraftSlots(next);
+  }, []);
+
+  const participantId = activeParticipant?.id ?? "none";
+  const participantSlots = activeParticipant?.slots;
 
   useEffect(() => {
-    const slots = activeParticipant?.slots ?? [];
-    const participantId = activeParticipant?.id ?? "none";
+    if (hasUnsavedEditsRef.current && participantId === "draft") {
+      return;
+    }
+
+    const slots = participantSlots ?? [];
     const slotsKey = JSON.stringify(slots);
     const syncKey = `${participantId}:${grid.totalSlots}:${slotsKey}`;
 
@@ -222,8 +233,10 @@ export default function AvailabilityGrid({
     }
 
     lastSyncedSlotsRef.current = syncKey;
-    setDraftSlots(normalizeSlots(slots, grid.totalSlots));
-  }, [activeParticipant, grid.totalSlots]);
+    const normalized = normalizeSlots(slots, grid.totalSlots);
+    draftSlotsRef.current = normalized;
+    setDraftSlots(normalized);
+  }, [participantId, participantSlots, grid.totalSlots]);
 
   const { availabilityCounts, namesBySlot, contributorCount } = useMemo(() => {
     const counts = Array.from({ length: grid.totalSlots }, () => 0);
@@ -304,9 +317,9 @@ export default function AvailabilityGrid({
         next[index] = paintValueRef.current;
       }
 
-      setDraftSlots(next);
+      commitDraftSlots(next);
     },
-    [grid.slotsPerDay],
+    [commitDraftSlots, grid.slotsPerDay],
   );
 
   const stopPainting = useCallback(() => {
@@ -323,7 +336,10 @@ export default function AvailabilityGrid({
 
       pending.activated = true;
       paintAnchorRef.current = indexToAnchor(pending.index, grid.slotsPerDay);
-      paintValueRef.current = !snapshotRef.current[pending.index];
+      paintValueRef.current =
+        pending.pointerType === "touch"
+          ? true
+          : !snapshotRef.current[pending.index];
       paintingRef.current = true;
       lastPaintedRef.current = null;
       paintRectangle(index);
@@ -332,11 +348,18 @@ export default function AvailabilityGrid({
   );
 
   const beginPaint = useCallback(
-    (index: number, pointerId: number, clientX: number, clientY: number) => {
+    (
+      index: number,
+      pointerId: number,
+      pointerType: string,
+      clientX: number,
+      clientY: number,
+    ) => {
       snapshotRef.current = draftSlotsRef.current.slice();
       pendingPaintRef.current = {
         index,
         pointerId,
+        pointerType,
         startX: clientX,
         startY: clientY,
         activated: false,
@@ -356,7 +379,11 @@ export default function AvailabilityGrid({
       if (!pending.activated) {
         const dx = event.clientX - pending.startX;
         const dy = event.clientY - pending.startY;
-        if (dx * dx + dy * dy < PAINT_THRESHOLD_PX * PAINT_THRESHOLD_PX) {
+        const threshold =
+          pending.pointerType === "touch"
+            ? TOUCH_PAINT_THRESHOLD_PX
+            : PAINT_THRESHOLD_PX;
+        if (dx * dx + dy * dy < threshold * threshold) {
           return;
         }
 
@@ -376,9 +403,9 @@ export default function AvailabilityGrid({
       if (!pending || event.pointerId !== pending.pointerId) return;
 
       if (!pending.activated) {
-        const next = snapshotRef.current.slice();
+        const next = draftSlotsRef.current.slice();
         next[pending.index] = !next[pending.index];
-        setDraftSlots(next);
+        commitDraftSlots(next);
       }
 
       if (gridRef.current?.hasPointerCapture(event.pointerId)) {
@@ -400,6 +427,7 @@ export default function AvailabilityGrid({
   }, [
     activateStroke,
     canPaint,
+    commitDraftSlots,
     paintRectangle,
     resolveIndexFromPoint,
     stopPainting,
@@ -416,6 +444,7 @@ export default function AvailabilityGrid({
     beginPaint(
       index,
       pointerEvent.pointerId,
+      pointerEvent.pointerType,
       pointerEvent.clientX,
       pointerEvent.clientY,
     );
@@ -528,6 +557,8 @@ export default function AvailabilityGrid({
         throw new Error(data.error || "Could not save availability.");
       }
 
+      hasUnsavedEditsRef.current = false;
+      draftSlotsRef.current = data.slots;
       setDraftSlots(data.slots);
       lastSyncedSlotsRef.current = `${data.id}:${grid.totalSlots}:${JSON.stringify(data.slots)}`;
       setMode("group");
