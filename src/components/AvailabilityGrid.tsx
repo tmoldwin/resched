@@ -336,10 +336,7 @@ export default function AvailabilityGrid({
 
       pending.activated = true;
       paintAnchorRef.current = indexToAnchor(pending.index, grid.slotsPerDay);
-      paintValueRef.current =
-        pending.pointerType === "touch"
-          ? true
-          : !snapshotRef.current[pending.index];
+      paintValueRef.current = !snapshotRef.current[pending.index];
       paintingRef.current = true;
       lastPaintedRef.current = null;
       paintRectangle(index);
