@@ -30,7 +30,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-white text-zinc-900">
         <header className="border-b border-zinc-200">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-base font-semibold tracking-tight">
               resched
             </Link>

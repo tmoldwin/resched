@@ -37,7 +37,7 @@ const SELECTED_COLOR = "#16a34a";
 const EMPTY_COLOR = "#fafafa";
 const DAY_LINE = "#d4d4d8";
 const TIME_COLUMN = "3rem";
-const SCROLL_MARGIN_CLASS = "w-16 shrink-0 self-stretch touch-pan-y sm:w-8";
+const SCROLL_MARGIN_CLASS = "w-10 shrink-0 self-stretch touch-pan-y sm:w-6";
 const THUMB_TOOLTIP_OFFSET = 72;
 
 type TooltipState = {
@@ -174,6 +174,7 @@ export default function AvailabilityGrid({
   const [groupFocusIndex, setGroupFocusIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [saveNotice, setSaveNotice] = useState<"success" | "error" | null>(null);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const paintingRef = useRef(false);
@@ -190,7 +191,16 @@ export default function AvailabilityGrid({
   useEffect(() => {
     setTooltip(null);
     setGroupFocusIndex(null);
+    if (mode === "edit") {
+      setSaveNotice(null);
+    }
   }, [mode]);
+
+  useEffect(() => {
+    if (saveNotice !== "success") return;
+    const timer = window.setTimeout(() => setSaveNotice(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
 
   useEffect(() => {
     if (mode !== "group" || groupFocusIndex === null) return;
@@ -429,12 +439,14 @@ export default function AvailabilityGrid({
 
   async function saveAvailability() {
     if (!activeParticipant?.name.trim()) {
+      setSaveNotice("error");
       setSaveMessage("Enter your name before saving.");
       return;
     }
 
     setSaving(true);
     setSaveMessage("");
+    setSaveNotice(null);
 
     try {
       const response = await fetch(`/api/events/${event.slug}/participants`, {
@@ -467,8 +479,11 @@ export default function AvailabilityGrid({
         slots: data.slots,
         updatedAt: new Date().toISOString(),
       });
-      setSaveMessage("Saved.");
+      setSaveNotice("success");
+      setSaveMessage("");
+      setMode("group");
     } catch (error) {
+      setSaveNotice("error");
       setSaveMessage(
         error instanceof Error ? error.message : "Could not save availability.",
       );
@@ -481,9 +496,21 @@ export default function AvailabilityGrid({
   const columnTemplate = gridColumns(grid.days.length);
 
   return (
-    <div className="space-y-3">
+    <section className="space-y-4 border-t border-zinc-200 pt-6">
+      {saveNotice === "success" ? (
+        <p className="notice-success" role="status">
+          Availability saved. You&apos;re now viewing group overlap.
+        </p>
+      ) : null}
+
+      {saveNotice === "error" && saveMessage ? (
+        <p className="notice-error" role="alert">
+          {saveMessage}
+        </p>
+      ) : null}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5">
+        <div className="inline-flex self-start rounded-lg border border-zinc-200 bg-white p-0.5">
           <button
             type="button"
             onClick={() => setMode("edit")}
@@ -508,19 +535,30 @@ export default function AvailabilityGrid({
           </button>
         </div>
 
-        <p className="text-sm text-zinc-500">
-          {mode === "edit"
-            ? hasName
-              ? `Drag to select · swipe side margins to scroll · ${selectedCount} slots`
-              : "Enter your name above to mark your availability"
-            : contributorCount > 0
-              ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"}`
-              : "No responses yet — mark your times and save"}
-        </p>
+        {mode === "edit" && hasName ? (
+          <button
+            type="button"
+            onClick={saveAvailability}
+            disabled={saving}
+            className="btn-primary w-full sm:w-auto"
+          >
+            {saving ? "Saving…" : "Save availability"}
+          </button>
+        ) : null}
       </div>
 
+      <p className="text-sm text-zinc-500">
+        {mode === "edit"
+          ? hasName
+            ? `Drag to select times · swipe side margins to scroll · ${selectedCount} slots selected`
+            : "Enter your name above to mark your availability"
+          : contributorCount > 0
+            ? `Darker green = more overlap · ${contributorCount} response${contributorCount === 1 ? "" : "s"} · tap a slot for details`
+            : "No responses yet — mark your times and save"}
+      </p>
+
       <div
-        className={`-mx-4 flex w-full items-stretch sm:mx-0 ${canPaint ? "select-none" : ""}`}
+        className={`flex w-full items-stretch ${canPaint ? "select-none" : ""}`}
       >
         <div className={SCROLL_MARGIN_CLASS} aria-hidden />
 
@@ -697,22 +735,6 @@ export default function AvailabilityGrid({
           <div className="mt-0.5 text-zinc-300">{tooltip.detail}</div>
         </div>
       ) : null}
-
-      {mode === "edit" && hasName ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={saveAvailability}
-            disabled={saving}
-            className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save availability"}
-          </button>
-          {saveMessage ? (
-            <span className="text-sm text-zinc-500">{saveMessage}</span>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    </section>
   );
 }

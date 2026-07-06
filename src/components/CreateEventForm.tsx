@@ -81,7 +81,7 @@ export default function CreateEventForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="max-w-lg space-y-5 rounded-lg border border-zinc-200 p-5 sm:p-6"
+      className="max-w-lg space-y-5 rounded-xl border border-zinc-200 p-5 shadow-sm sm:p-6"
     >
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-zinc-800" htmlFor="name">
@@ -93,7 +93,7 @@ export default function CreateEventForm() {
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Team sync"
-          className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
+          className="field-input"
         />
       </div>
 
@@ -112,7 +112,7 @@ export default function CreateEventForm() {
               setStartDate(value);
               if (value > endDate) setEndDate(value);
             }}
-            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
+            className="field-input"
           />
         </div>
         <div className="space-y-1.5">
@@ -126,7 +126,7 @@ export default function CreateEventForm() {
             min={startDate}
             value={endDate}
             onChange={(event) => setEndDate(event.target.value)}
-            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
+            className="field-input"
           />
         </div>
       </div>
@@ -142,7 +142,7 @@ export default function CreateEventForm() {
             required
             value={startTime}
             onChange={(event) => setStartTime(event.target.value)}
-            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
+            className="field-input"
           />
         </div>
         <div className="space-y-1.5">
@@ -155,7 +155,7 @@ export default function CreateEventForm() {
             required
             value={endTime}
             onChange={(event) => setEndTime(event.target.value)}
-            className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
+            className="field-input"
           />
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function CreateEventForm() {
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-md border border-zinc-200 px-3 py-2.5 outline-none ring-zinc-900/10 focus:border-zinc-400 focus:ring-2"
+          className="field-input"
         />
       </div>
 
@@ -177,18 +177,10 @@ export default function CreateEventForm() {
         {previewRange} · {timezone}
       </p>
 
-      {error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
+      {error ? <p className="notice-error">{error}</p> : null}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50"
-      >
-        {loading ? "Creating..." : "Create event"}
+      <button type="submit" disabled={loading} className="btn-primary w-full">
+        {loading ? "Creating…" : "Create event"}
       </button>
     </form>
   );
