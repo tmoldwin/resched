@@ -52,6 +52,24 @@ export function rowBorderColor(minutes: number): string {
   return "#e4e4e7";
 }
 
+export function dayColumnsFromDates(dates: string[]): DayColumn[] {
+  return dates.map((date) => {
+    const current = parseDate(date);
+    return {
+      date,
+      label: current.toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }),
+      dayNumber: current.getDate(),
+      weekdayShort: current.toLocaleDateString(undefined, {
+        weekday: "short",
+      }),
+    };
+  });
+}
+
 export function enumerateDays(startDate: string, endDate: string): DayColumn[] {
   const start = parseDate(startDate);
   const end = parseDate(endDate);
@@ -86,8 +104,12 @@ export function buildSlotGrid(
   dayStartMinutes: number,
   dayEndMinutes: number,
   slotMinutes: number,
+  dates?: string[],
 ): SlotGridMeta {
-  const days = enumerateDays(startDate, endDate);
+  const days =
+    dates && dates.length > 0
+      ? dayColumnsFromDates(dates)
+      : enumerateDays(startDate, endDate);
   const slotsPerDay = (dayEndMinutes - dayStartMinutes) / slotMinutes;
   const timeLabels = Array.from({ length: slotsPerDay }, (_, index) => {
     const start = slotStartMinutes(dayStartMinutes, index, slotMinutes);

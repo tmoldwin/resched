@@ -4,6 +4,7 @@ import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, participants } from "@/lib/db/schema";
 import { parseSlots } from "@/lib/slots";
+import { buildEventResponse } from "@/lib/event-response";
 import type { EventResponse } from "@/lib/types";
 
 type RouteContext = {
@@ -45,25 +46,16 @@ export async function GET(_request: Request, context: RouteContext) {
       }
     }
 
-    const payload: EventResponse = {
-      id: event.id,
-      slug: event.slug,
-      name: event.name,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      dayStartMinutes: event.dayStartMinutes,
-      dayEndMinutes: event.dayEndMinutes,
-      timezone: event.timezone,
-      slotMinutes: event.slotMinutes,
-      locked: Boolean(event.passwordHash),
-      participants: rows.map((row) => ({
+    const payload: EventResponse = buildEventResponse(
+      event,
+      rows.map((row) => ({
         id: row.id,
         name: row.name,
         slots: parseSlots(row.slots),
         updatedAt: row.updatedAt.toISOString(),
       })),
       myParticipant,
-    };
+    );
 
     return NextResponse.json(payload);
   } catch (error) {

@@ -138,6 +138,7 @@ export default function AvailabilityGrid({
         event.dayStartMinutes,
         event.dayEndMinutes,
         event.slotMinutes,
+        event.dates,
       ),
     [event],
   );

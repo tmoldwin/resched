@@ -12,6 +12,7 @@ import {
   setStoredSession,
   setStoredUnlockPassword,
 } from "@/lib/event-session";
+import { formatScheduleSummary } from "@/lib/schedule";
 import type { EventResponse } from "@/lib/types";
 
 type EventJoinPageProps = {
@@ -240,7 +241,13 @@ export default function EventJoinPage({ slug }: EventJoinPageProps) {
           </p>
           <h1 className="text-xl font-semibold text-zinc-900">{event.name}</h1>
           <p className="text-sm text-zinc-500">
-            {event.startDate} to {event.endDate}
+            {formatScheduleSummary({
+              mode: event.scheduleMode,
+              startDate: event.startDate,
+              endDate: event.endDate,
+              dates: event.dates,
+              config: event.scheduleConfig,
+            })}
           </p>
         </div>
 

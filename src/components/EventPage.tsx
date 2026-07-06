@@ -14,6 +14,7 @@ import {
   setStoredUnlockPassword,
   type StoredSession,
 } from "@/lib/event-session";
+import { formatScheduleSummary } from "@/lib/schedule";
 import type { EventResponse, ParticipantResponse } from "@/lib/types";
 
 type EventPageProps = {
@@ -177,6 +178,17 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
     };
   }, [event, identity.name, name, participantId]);
 
+  const scheduleLabel = useMemo(() => {
+    if (!event) return "";
+    return formatScheduleSummary({
+      mode: event.scheduleMode,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      dates: event.dates,
+      config: event.scheduleConfig,
+    });
+  }, [event]);
+
   function handleSaved(participant: ParticipantResponse & { editToken: string }) {
     const sessionData: StoredSession = {
       editToken: participant.editToken,
@@ -320,7 +332,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
         <div>
           <h1 className="page-title">{event.name}</h1>
           <p className="mt-1.5 text-sm text-zinc-500">
-            {event.startDate} to {event.endDate} · {event.timezone}
+            {scheduleLabel} · {event.timezone}
           </p>
         </div>
 

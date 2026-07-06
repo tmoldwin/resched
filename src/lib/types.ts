@@ -1,3 +1,9 @@
+export type ScheduleMode = "range" | "weekdays" | "monthdays";
+
+export type ScheduleConfig =
+  | { weekdays: number[] }
+  | { monthDays: number[] };
+
 export type ParticipantResponse = {
   id: string;
   name: string;
@@ -15,6 +21,9 @@ export type EventResponse = {
   name: string;
   startDate: string;
   endDate: string;
+  scheduleMode: ScheduleMode;
+  dates: string[];
+  scheduleConfig?: ScheduleConfig | null;
   dayStartMinutes: number;
   dayEndMinutes: number;
   timezone: string;
@@ -28,10 +37,12 @@ export type CreateEventPayload = {
   name: string;
   startDate: string;
   endDate: string;
+  scheduleMode?: ScheduleMode;
+  weekdays?: number[];
+  monthDays?: number[];
   dayStartMinutes: number;
   dayEndMinutes: number;
   timezone: string;
-  slotMinutes: number;
   password?: string;
   cloneFromSlug?: string;
 };

@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, participants, users } from "@/lib/db/schema";
+import { resolvedDatesForDbEvent } from "@/lib/event-response";
 import { verifyPassword } from "@/lib/password";
 import {
   buildSlotGrid,
@@ -60,6 +61,7 @@ export async function POST(request: Request, context: RouteContext) {
       event.dayStartMinutes,
       event.dayEndMinutes,
       event.slotMinutes,
+      resolvedDatesForDbEvent(event),
     );
 
     if (userId) {

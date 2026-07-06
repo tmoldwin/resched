@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, daySpan, todayString } from "@/lib/dates";
 import { markLocallyCreated } from "@/lib/event-claims";
+import {
+  defaultMonthWindow,
+  formatScheduleSummary,
+  generateEventDates,
+  WEEKDAY_OPTIONS,
+  type ScheduleMode,
+} from "@/lib/schedule";
 import type { EventResponse } from "@/lib/types";
 
 function timeToMinutes(value: string) {
@@ -17,6 +24,12 @@ function minutesToTime(minutes: number) {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
+function toggleInList(values: number[], value: number) {
+  return values.includes(value)
+    ? values.filter((item) => item !== value)
+    : [...values, value];
+}
+
 type CreateEventFormProps = {
   cloneSlug?: string;
 };
@@ -27,8 +40,11 @@ export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
   const startDefault = todayString();
 
   const [name, setName] = useState("");
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("range");
   const [startDate, setStartDate] = useState(startDefault);
   const [endDate, setEndDate] = useState(addDays(startDefault, 6));
+  const [weekdays, setWeekdays] = useState<number[]>([1, 3, 5]);
+  const [monthDays, setMonthDays] = useState<number[]>([1, 15]);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
   const [password, setPassword] = useState("");
@@ -53,16 +69,29 @@ export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
           throw new Error(data.error || "Could not load event to clone.");
         }
 
-        const span = daySpan(data.startDate, data.endDate);
         const start = todayString();
+        const mode = data.scheduleMode ?? "range";
 
         setName(data.name);
+        setScheduleMode(mode);
         setStartDate(start);
-        setEndDate(addDays(start, span));
+        setEndDate(
+          mode === "monthdays"
+            ? defaultMonthWindow(start)
+            : addDays(start, Math.max(daySpan(data.startDate, data.endDate), 6)),
+        );
         setStartTime(minutesToTime(data.dayStartMinutes));
         setEndTime(minutesToTime(data.dayEndMinutes));
         setClonedFrom(data.name);
         setCloneHasPassword(data.locked);
+
+        if (data.scheduleConfig && "weekdays" in data.scheduleConfig) {
+          setWeekdays(data.scheduleConfig.weekdays);
+        }
+
+        if (data.scheduleConfig && "monthDays" in data.scheduleConfig) {
+          setMonthDays(data.scheduleConfig.monthDays);
+        }
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -77,14 +106,69 @@ export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
     void loadCloneSource();
   }, [cloneSlug]);
 
+  const scheduleConfig = useMemo(() => {
+    if (scheduleMode === "weekdays") {
+      return { weekdays };
+    }
+    if (scheduleMode === "monthdays") {
+      return { monthDays };
+    }
+    return null;
+  }, [monthDays, scheduleMode, weekdays]);
+
+  const resolvedDates = useMemo(
+    () => generateEventDates(scheduleMode, startDate, endDate, scheduleConfig),
+    [endDate, scheduleConfig, scheduleMode, startDate],
+  );
+
   const previewRange = useMemo(() => {
-    return `${startDate} to ${endDate}, ${startTime}–${endTime}`;
-  }, [startDate, endDate, startTime, endTime]);
+    const schedule = formatScheduleSummary({
+      mode: scheduleMode,
+      startDate,
+      endDate,
+      dates: resolvedDates,
+      config: scheduleConfig,
+    });
+    return `${schedule}, ${startTime}–${endTime}`;
+  }, [
+    endDate,
+    endTime,
+    resolvedDates,
+    scheduleConfig,
+    scheduleMode,
+    startDate,
+    startTime,
+  ]);
+
+  function handleModeChange(mode: ScheduleMode) {
+    setScheduleMode(mode);
+    if (mode === "monthdays" && endDate < addDays(startDate, 27)) {
+      setEndDate(defaultMonthWindow(startDate));
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError("");
+
+    if (scheduleMode === "weekdays" && weekdays.length === 0) {
+      setError("Select at least one day of the week.");
+      setLoading(false);
+      return;
+    }
+
+    if (scheduleMode === "monthdays" && monthDays.length === 0) {
+      setError("Select at least one day of the month.");
+      setLoading(false);
+      return;
+    }
+
+    if (resolvedDates.length === 0) {
+      setError("No dates match this schedule in the selected window.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch("/api/events", {
@@ -94,6 +178,9 @@ export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
           name,
           startDate,
           endDate,
+          scheduleMode,
+          weekdays: scheduleMode === "weekdays" ? weekdays : undefined,
+          monthDays: scheduleMode === "monthdays" ? monthDays : undefined,
           dayStartMinutes: timeToMinutes(startTime),
           dayEndMinutes: timeToMinutes(endTime),
           timezone,
@@ -156,39 +243,189 @@ export default function CreateEventForm({ cloneSlug }: CreateEventFormProps) {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-zinc-800" htmlFor="startDate">
-            Start date
-          </label>
-          <input
-            id="startDate"
-            type="date"
-            required
-            value={startDate}
-            onChange={(event) => {
-              const value = event.target.value;
-              setStartDate(value);
-              if (value > endDate) setEndDate(value);
-            }}
-            className="field-input"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-zinc-800" htmlFor="endDate">
-            End date
-          </label>
-          <input
-            id="endDate"
-            type="date"
-            required
-            min={startDate}
-            value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
-            className="field-input"
-          />
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-zinc-800">Schedule type</p>
+        <div className="segmented-3" role="tablist" aria-label="Schedule type">
+          {(
+            [
+              ["range", "Date range"],
+              ["weekdays", "Days of week"],
+              ["monthdays", "Days of month"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={scheduleMode === mode}
+              onClick={() => handleModeChange(mode)}
+              className={`segmented-item ${
+                scheduleMode === mode
+                  ? "segmented-item-active"
+                  : "segmented-item-inactive"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
+
+      {scheduleMode === "range" ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-800" htmlFor="startDate">
+              Start date
+            </label>
+            <input
+              id="startDate"
+              type="date"
+              required
+              value={startDate}
+              onChange={(event) => {
+                const value = event.target.value;
+                setStartDate(value);
+                if (value > endDate) setEndDate(value);
+              }}
+              className="field-input"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-800" htmlFor="endDate">
+              End date
+            </label>
+            <input
+              id="endDate"
+              type="date"
+              required
+              min={startDate}
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              className="field-input"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {scheduleMode === "weekdays" ? (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-zinc-800">Repeat on</p>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAY_OPTIONS.map((option) => {
+                const active = weekdays.includes(option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() =>
+                      setWeekdays((current) => toggleInList(current, option.value))
+                    }
+                    className={`chip-toggle min-w-12 ${active ? "chip-toggle-active" : ""}`}
+                    aria-pressed={active}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-zinc-800" htmlFor="weekday-start">
+                From
+              </label>
+              <input
+                id="weekday-start"
+                type="date"
+                required
+                value={startDate}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setStartDate(value);
+                  if (value > endDate) setEndDate(value);
+                }}
+                className="field-input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-zinc-800" htmlFor="weekday-end">
+                Until
+              </label>
+              <input
+                id="weekday-end"
+                type="date"
+                required
+                min={startDate}
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="field-input"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {scheduleMode === "monthdays" ? (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-zinc-800">Repeat on day</p>
+            <div className="chip-grid">
+              {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => {
+                const active = monthDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() =>
+                      setMonthDays((current) => toggleInList(current, day))
+                    }
+                    className={`chip-toggle px-0 ${active ? "chip-toggle-active" : ""}`}
+                    aria-pressed={active}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-zinc-800" htmlFor="monthday-start">
+                From
+              </label>
+              <input
+                id="monthday-start"
+                type="date"
+                required
+                value={startDate}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setStartDate(value);
+                  if (value > endDate) setEndDate(defaultMonthWindow(value));
+                }}
+                className="field-input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-zinc-800" htmlFor="monthday-end">
+                Until
+              </label>
+              <input
+                id="monthday-end"
+                type="date"
+                required
+                min={startDate}
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="field-input"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">

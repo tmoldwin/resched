@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";import { getSessionUserId } from "@/lib/auth";
+import { nanoid } from "nanoid";
+import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/password";
+import {
+  generateEventDates,
+  serializeEventDates,
+  serializeScheduleConfig,
+  type ScheduleMode,
+} from "@/lib/schedule";
 import type { CreateEventPayload } from "@/lib/types";
 
 function slugify(name: string): string {
@@ -14,6 +21,20 @@ function slugify(name: string): string {
     .slice(0, 40);
 
   return `${base || "event"}-${nanoid(8)}`;
+}
+
+function buildScheduleConfig(body: CreateEventPayload) {
+  const mode: ScheduleMode = body.scheduleMode ?? "range";
+
+  if (mode === "weekdays") {
+    return { weekdays: body.weekdays ?? [] };
+  }
+
+  if (mode === "monthdays") {
+    return { monthDays: body.monthDays ?? [] };
+  }
+
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -30,6 +51,49 @@ export async function POST(request: Request) {
 
     if (body.dayStartMinutes >= body.dayEndMinutes) {
       return NextResponse.json({ error: "Invalid time range." }, { status: 400 });
+    }
+
+    const scheduleMode: ScheduleMode = body.scheduleMode ?? "range";
+    const scheduleConfig = buildScheduleConfig(body);
+
+    if (scheduleMode === "weekdays") {
+      const selected =
+        (scheduleConfig && "weekdays" in scheduleConfig
+          ? scheduleConfig.weekdays
+          : []) ?? [];
+      if (selected.length === 0) {
+        return NextResponse.json(
+          { error: "Select at least one day of the week." },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (scheduleMode === "monthdays") {
+      const selected =
+        (scheduleConfig && "monthDays" in scheduleConfig
+          ? scheduleConfig.monthDays
+          : []) ?? [];
+      if (selected.length === 0) {
+        return NextResponse.json(
+          { error: "Select at least one day of the month." },
+          { status: 400 },
+        );
+      }
+    }
+
+    const dates = generateEventDates(
+      scheduleMode,
+      body.startDate,
+      body.endDate,
+      scheduleConfig,
+    );
+
+    if (dates.length === 0) {
+      return NextResponse.json(
+        { error: "No dates match this schedule in the selected window." },
+        { status: 400 },
+      );
     }
 
     const id = nanoid(12);
@@ -59,6 +123,9 @@ export async function POST(request: Request) {
       name: body.name.trim(),
       startDate: body.startDate,
       endDate: body.endDate,
+      scheduleMode,
+      dates: serializeEventDates(dates),
+      scheduleConfig: serializeScheduleConfig(scheduleMode, scheduleConfig),
       dayStartMinutes: body.dayStartMinutes,
       dayEndMinutes: body.dayEndMinutes,
       timezone,
