@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
+import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/password";
@@ -38,6 +39,8 @@ export async function POST(request: Request) {
       Intl.DateTimeFormat().resolvedOptions().timeZone ||
       "UTC";
 
+    const creatorId = await getSessionUserId();
+
     await getDb().insert(events).values({
       id,
       slug,
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
       passwordHash: body.password?.trim()
         ? hashPassword(body.password.trim())
         : null,
+      creatorId,
     });
 
     return NextResponse.json({ slug });

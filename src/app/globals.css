@@ -38,6 +38,10 @@ body {
     @apply inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  .btn-google {
+    @apply inline-flex items-center justify-center gap-2.5 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
   .notice-success {
     @apply rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800;
   }

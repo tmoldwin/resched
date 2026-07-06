@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, participants } from "@/lib/db/schema";
 import { parseSlots } from "@/lib/slots";
@@ -12,6 +13,7 @@ type RouteContext = {
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { slug } = await context.params;
+    const userId = await getSessionUserId();
 
     const [event] = await getDb()
       .select()
@@ -28,6 +30,20 @@ export async function GET(_request: Request, context: RouteContext) {
       .from(participants)
       .where(eq(participants.eventId, event.id))
       .orderBy(participants.updatedAt);
+
+    let myParticipant: EventResponse["myParticipant"] = null;
+    if (userId) {
+      const mine = rows.find((row) => row.userId === userId);
+      if (mine) {
+        myParticipant = {
+          id: mine.id,
+          name: mine.name,
+          slots: parseSlots(mine.slots),
+          editToken: mine.editToken,
+          updatedAt: mine.updatedAt.toISOString(),
+        };
+      }
+    }
 
     const payload: EventResponse = {
       id: event.id,
@@ -46,6 +62,7 @@ export async function GET(_request: Request, context: RouteContext) {
         slots: parseSlots(row.slots),
         updatedAt: row.updatedAt.toISOString(),
       })),
+      myParticipant,
     };
 
     return NextResponse.json(payload);

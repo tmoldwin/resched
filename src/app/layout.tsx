@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import AuthHeader from "@/components/AuthHeader";
+import SessionProvider from "@/components/SessionProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,20 +31,17 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-white text-zinc-900">
-        <header className="border-b border-zinc-200">
-          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-base font-semibold tracking-tight">
-              resched
-            </Link>
-            <Link
-              href="/"
-              className="text-sm text-zinc-600 transition hover:text-zinc-900"
-            >
-              New event
-            </Link>
-          </div>
-        </header>
-        <main className="flex-1">{children}</main>
+        <SessionProvider>
+          <header className="border-b border-zinc-200">
+            <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+              <Link href="/" className="text-base font-semibold tracking-tight">
+                resched
+              </Link>
+              <AuthHeader />
+            </div>
+          </header>
+          <main className="flex-1">{children}</main>
+        </SessionProvider>
       </body>
     </html>
   );

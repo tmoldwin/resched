@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import AvailabilityGrid from "@/components/AvailabilityGrid";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 import type { EventResponse, ParticipantResponse } from "@/lib/types";
 
 type EventPageProps = {
@@ -27,6 +29,7 @@ type StoredSession = {
 };
 
 export default function EventPage({ slug }: EventPageProps) {
+  const { data: session, status: sessionStatus } = useSession();
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -39,6 +42,9 @@ export default function EventPage({ slug }: EventPageProps) {
   const [unlockError, setUnlockError] = useState("");
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+
+  const isGoogleUser = Boolean(session?.user?.id);
+  const nameLocked = isGoogleUser;
 
   const loadEvent = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -78,23 +84,45 @@ export default function EventPage({ slug }: EventPageProps) {
   }, []);
 
   useEffect(() => {
-    const raw = localStorage.getItem(storageKey(slug));
-    if (raw) {
-      try {
-        const session = JSON.parse(raw) as StoredSession;
-        setEditToken(session.editToken);
-        setParticipantId(session.participantId);
-        setName(session.name);
-      } catch {
-        localStorage.removeItem(storageKey(slug));
-      }
-    }
-
     if (localStorage.getItem(unlockKey(slug)) === "1") {
       setUnlocked(true);
       setStoredPassword(sessionStorage.getItem(passwordKey(slug)));
     }
   }, [slug]);
+
+  useEffect(() => {
+    if (!event) return;
+
+    if (event.myParticipant) {
+      setEditToken(event.myParticipant.editToken);
+      setParticipantId(event.myParticipant.id);
+      setName(event.myParticipant.name);
+      const sessionData: StoredSession = {
+        editToken: event.myParticipant.editToken,
+        participantId: event.myParticipant.id,
+        name: event.myParticipant.name,
+      };
+      localStorage.setItem(storageKey(slug), JSON.stringify(sessionData));
+      return;
+    }
+
+    if (isGoogleUser && session?.user?.name) {
+      setName(session.user.name);
+      return;
+    }
+
+    const raw = localStorage.getItem(storageKey(slug));
+    if (raw) {
+      try {
+        const stored = JSON.parse(raw) as StoredSession;
+        setEditToken(stored.editToken);
+        setParticipantId(stored.participantId);
+        setName(stored.name);
+      } catch {
+        localStorage.removeItem(storageKey(slug));
+      }
+    }
+  }, [event, isGoogleUser, session?.user?.name, slug]);
 
   const activeParticipant = useMemo<ParticipantResponse | null>(() => {
     if (!event) return null;
@@ -108,6 +136,10 @@ export default function EventPage({ slug }: EventPageProps) {
       }
     }
 
+    if (event.myParticipant) {
+      return event.myParticipant;
+    }
+
     return {
       id: "draft",
       name,
@@ -117,12 +149,12 @@ export default function EventPage({ slug }: EventPageProps) {
   }, [event, participantId, name]);
 
   function handleSaved(participant: ParticipantResponse & { editToken: string }) {
-    const session: StoredSession = {
+    const sessionData: StoredSession = {
       editToken: participant.editToken,
       participantId: participant.id,
       name: participant.name,
     };
-    localStorage.setItem(storageKey(slug), JSON.stringify(session));
+    localStorage.setItem(storageKey(slug), JSON.stringify(sessionData));
     setEditToken(participant.editToken);
     setParticipantId(participant.id);
     setName(participant.name);
@@ -163,7 +195,7 @@ export default function EventPage({ slug }: EventPageProps) {
     window.setTimeout(() => setCopied(false), 2000);
   }
 
-  if (loading) {
+  if (loading || sessionStatus === "loading") {
     return (
       <div className="mx-auto flex min-h-[40vh] max-w-3xl items-center justify-center px-4">
         <p className="text-sm text-zinc-500">Loading event…</p>
@@ -237,7 +269,7 @@ export default function EventPage({ slug }: EventPageProps) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <label className="text-sm font-medium text-zinc-800" htmlFor="participant-name">
               Your name
@@ -247,13 +279,29 @@ export default function EventPage({ slug }: EventPageProps) {
               {event.participants.length === 1 ? "" : "s"}
             </span>
           </div>
+
+          {!isGoogleUser ? (
+            <GoogleSignInButton
+              callbackUrl={shareUrl || `/e/${slug}`}
+              label="Continue with Google"
+            />
+          ) : null}
+
           <input
             id="participant-name"
             value={name}
             onChange={(inputEvent) => setName(inputEvent.target.value)}
             placeholder="Add your name"
-            className="field-input"
+            readOnly={nameLocked}
+            className={nameLocked ? "field-input-readonly" : "field-input"}
           />
+          {nameLocked ? (
+            <p className="text-xs text-zinc-500">Signed in with Google</p>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              Or enter your name manually above
+            </p>
+          )}
         </div>
       </section>
 

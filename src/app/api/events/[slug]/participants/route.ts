@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { events, participants } from "@/lib/db/schema";
+import { events, participants, users } from "@/lib/db/schema";
 import { verifyPassword } from "@/lib/password";
 import {
   buildSlotGrid,
@@ -22,10 +23,20 @@ type ParticipantPayload = {
   password?: string;
 };
 
+async function getLinkedUserName(userId: string) {
+  const [user] = await getDb()
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return user?.name ?? null;
+}
+
 export async function POST(request: Request, context: RouteContext) {
   try {
     const { slug } = await context.params;
     const body = (await request.json()) as ParticipantPayload;
+    const userId = await getSessionUserId();
 
     const [event] = await getDb()
       .select()
@@ -51,6 +62,39 @@ export async function POST(request: Request, context: RouteContext) {
       event.slotMinutes,
     );
 
+    if (userId) {
+      const [existingByUser] = await getDb()
+        .select()
+        .from(participants)
+        .where(
+          and(eq(participants.eventId, event.id), eq(participants.userId, userId)),
+        )
+        .limit(1);
+
+      if (existingByUser) {
+        const linkedName = (await getLinkedUserName(userId)) ?? existingByUser.name;
+        const nextSlots = body.slots
+          ? normalizeSlots(body.slots, grid.totalSlots)
+          : parseSlots(existingByUser.slots);
+
+        await getDb()
+          .update(participants)
+          .set({
+            name: linkedName,
+            slots: serializeSlots(nextSlots),
+            updatedAt: new Date(),
+          })
+          .where(eq(participants.id, existingByUser.id));
+
+        return NextResponse.json({
+          id: existingByUser.id,
+          name: linkedName,
+          editToken: existingByUser.editToken,
+          slots: nextSlots,
+        });
+      }
+    }
+
     if (body.editToken) {
       const [existing] = await getDb()
         .select()
@@ -62,7 +106,9 @@ export async function POST(request: Request, context: RouteContext) {
         return NextResponse.json({ error: "Invalid edit token." }, { status: 403 });
       }
 
-      const nextName = body.name?.trim() || existing.name;
+      const linkedName = userId
+        ? ((await getLinkedUserName(userId)) ?? existing.name)
+        : body.name?.trim() || existing.name;
       const nextSlots = body.slots
         ? normalizeSlots(body.slots, grid.totalSlots)
         : parseSlots(existing.slots);
@@ -70,21 +116,25 @@ export async function POST(request: Request, context: RouteContext) {
       await getDb()
         .update(participants)
         .set({
-          name: nextName,
+          name: linkedName,
           slots: serializeSlots(nextSlots),
+          userId: userId ?? existing.userId,
           updatedAt: new Date(),
         })
         .where(eq(participants.id, existing.id));
 
       return NextResponse.json({
         id: existing.id,
-        name: nextName,
+        name: linkedName,
         editToken: existing.editToken,
         slots: nextSlots,
       });
     }
 
-    const name = body.name?.trim();
+    const name = userId
+      ? await getLinkedUserName(userId)
+      : body.name?.trim();
+
     if (!name) {
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
     }
@@ -96,6 +146,7 @@ export async function POST(request: Request, context: RouteContext) {
     await getDb().insert(participants).values({
       id,
       eventId: event.id,
+      userId,
       name,
       editToken,
       slots: serializeSlots(slots),

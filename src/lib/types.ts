@@ -5,6 +5,10 @@ export type ParticipantResponse = {
   updatedAt: string;
 };
 
+export type MyParticipantResponse = ParticipantResponse & {
+  editToken: string;
+};
+
 export type EventResponse = {
   id: string;
   slug: string;
@@ -17,6 +21,7 @@ export type EventResponse = {
   slotMinutes: number;
   locked: boolean;
   participants: ParticipantResponse[];
+  myParticipant?: MyParticipantResponse | null;
 };
 
 export type CreateEventPayload = {
@@ -28,4 +33,20 @@ export type CreateEventPayload = {
   timezone: string;
   slotMinutes: number;
   password?: string;
+};
+
+export type UserEventSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  role: "creator" | "attendee";
+  participantCount: number;
+  updatedAt: string;
+};
+
+export type UserEventsResponse = {
+  created: UserEventSummary[];
+  attending: UserEventSummary[];
 };
