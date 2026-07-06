@@ -40,8 +40,11 @@ export default function EventPage({ slug }: EventPageProps) {
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
 
-  const loadEvent = useCallback(async () => {
-    setLoading(true);
+  const loadEvent = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setLoading(true);
+    }
     setError("");
 
     try {
@@ -60,7 +63,9 @@ export default function EventPage({ slug }: EventPageProps) {
         loadError instanceof Error ? loadError.message : "Could not load event.",
       );
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [slug]);
 
@@ -121,7 +126,7 @@ export default function EventPage({ slug }: EventPageProps) {
     setEditToken(participant.editToken);
     setParticipantId(participant.id);
     setName(participant.name);
-    void loadEvent();
+    void loadEvent({ silent: true });
   }
 
   async function unlockEvent() {

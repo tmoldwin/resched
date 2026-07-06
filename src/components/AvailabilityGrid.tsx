@@ -472,6 +472,10 @@ export default function AvailabilityGrid({
         throw new Error(data.error || "Could not save availability.");
       }
 
+      setDraftSlots(data.slots);
+      setMode("group");
+      setSaveNotice("success");
+      setSaveMessage("");
       onSaved?.({
         id: data.id,
         name: data.name,
@@ -479,9 +483,6 @@ export default function AvailabilityGrid({
         slots: data.slots,
         updatedAt: new Date().toISOString(),
       });
-      setSaveNotice("success");
-      setSaveMessage("");
-      setMode("group");
     } catch (error) {
       setSaveNotice("error");
       setSaveMessage(
@@ -497,20 +498,13 @@ export default function AvailabilityGrid({
 
   return (
     <section className="space-y-4 border-t border-zinc-200 pt-6">
-      {saveNotice === "success" ? (
+      {saveNotice === "success" && mode === "group" ? (
         <p className="notice-success" role="status">
           Availability saved. You&apos;re now viewing group overlap.
         </p>
       ) : null}
 
-      {saveNotice === "error" && saveMessage ? (
-        <p className="notice-error" role="alert">
-          {saveMessage}
-        </p>
-      ) : null}
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex self-start rounded-lg border border-zinc-200 bg-white p-0.5">
+      <div className="inline-flex self-start rounded-lg border border-zinc-200 bg-white p-0.5">
           <button
             type="button"
             onClick={() => setMode("edit")}
@@ -534,18 +528,6 @@ export default function AvailabilityGrid({
             Group view
           </button>
         </div>
-
-        {mode === "edit" && hasName ? (
-          <button
-            type="button"
-            onClick={saveAvailability}
-            disabled={saving}
-            className="btn-primary w-full sm:w-auto"
-          >
-            {saving ? "Saving…" : "Save availability"}
-          </button>
-        ) : null}
-      </div>
 
       <p className="text-sm text-zinc-500">
         {mode === "edit"
@@ -733,6 +715,24 @@ export default function AvailabilityGrid({
         >
           <div className="font-medium">{tooltip.headline}</div>
           <div className="mt-0.5 text-zinc-300">{tooltip.detail}</div>
+        </div>
+      ) : null}
+
+      {mode === "edit" && hasName ? (
+        <div className="space-y-2">
+          {saveNotice === "error" && saveMessage ? (
+            <p className="notice-error" role="alert">
+              {saveMessage}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={saveAvailability}
+            disabled={saving}
+            className="btn-primary w-full"
+          >
+            {saving ? "Saving…" : "Save availability"}
+          </button>
         </div>
       ) : null}
     </section>
