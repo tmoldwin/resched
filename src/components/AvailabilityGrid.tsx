@@ -161,6 +161,16 @@ export default function AvailabilityGrid({
   const lastPaintedRef = useRef<number | null>(null);
   const draftSlotsRef = useRef(draftSlots);
   const touchInteractionRef = useRef(false);
+  const lastSyncedSlotsRef = useRef<string | null>(null);
+  const pendingPaintRef = useRef<{
+    index: number;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    activated: boolean;
+  } | null>(null);
+
+  const PAINT_THRESHOLD_PX = 10;
 
   const canPaint = mode === "edit";
 
@@ -202,9 +212,17 @@ export default function AvailabilityGrid({
   }, [draftSlots]);
 
   useEffect(() => {
-    setDraftSlots(
-      normalizeSlots(activeParticipant?.slots ?? [], grid.totalSlots),
-    );
+    const slots = activeParticipant?.slots ?? [];
+    const participantId = activeParticipant?.id ?? "none";
+    const slotsKey = JSON.stringify(slots);
+    const syncKey = `${participantId}:${grid.totalSlots}:${slotsKey}`;
+
+    if (lastSyncedSlotsRef.current === syncKey) {
+      return;
+    }
+
+    lastSyncedSlotsRef.current = syncKey;
+    setDraftSlots(normalizeSlots(slots, grid.totalSlots));
   }, [activeParticipant, grid.totalSlots]);
 
   const { availabilityCounts, namesBySlot, contributorCount } = useMemo(() => {
@@ -295,32 +313,78 @@ export default function AvailabilityGrid({
     paintingRef.current = false;
     paintAnchorRef.current = null;
     lastPaintedRef.current = null;
+    pendingPaintRef.current = null;
   }, []);
 
-  const beginPaint = useCallback(
-    (index: number, pointerId: number) => {
-      snapshotRef.current = draftSlotsRef.current.slice();
-      paintAnchorRef.current = indexToAnchor(index, grid.slotsPerDay);
-      paintValueRef.current = !draftSlotsRef.current[index];
+  const activateStroke = useCallback(
+    (index: number) => {
+      const pending = pendingPaintRef.current;
+      if (!pending || pending.activated) return;
+
+      pending.activated = true;
+      paintAnchorRef.current = indexToAnchor(pending.index, grid.slotsPerDay);
+      paintValueRef.current = !snapshotRef.current[pending.index];
       paintingRef.current = true;
       lastPaintedRef.current = null;
       paintRectangle(index);
-      gridRef.current?.setPointerCapture(pointerId);
     },
     [grid.slotsPerDay, paintRectangle],
+  );
+
+  const beginPaint = useCallback(
+    (index: number, pointerId: number, clientX: number, clientY: number) => {
+      snapshotRef.current = draftSlotsRef.current.slice();
+      pendingPaintRef.current = {
+        index,
+        pointerId,
+        startX: clientX,
+        startY: clientY,
+        activated: false,
+      };
+      gridRef.current?.setPointerCapture(pointerId);
+    },
+    [],
   );
 
   useEffect(() => {
     if (!canPaint) return;
 
     function onPointerMove(event: PointerEvent) {
+      const pending = pendingPaintRef.current;
+      if (!pending || event.pointerId !== pending.pointerId) return;
+
+      if (!pending.activated) {
+        const dx = event.clientX - pending.startX;
+        const dy = event.clientY - pending.startY;
+        if (dx * dx + dy * dy < PAINT_THRESHOLD_PX * PAINT_THRESHOLD_PX) {
+          return;
+        }
+
+        const index = resolveIndexFromPoint(event.clientX, event.clientY);
+        activateStroke(index ?? pending.index);
+        return;
+      }
+
       if (!paintingRef.current) return;
       event.preventDefault();
       const index = resolveIndexFromPoint(event.clientX, event.clientY);
       if (index !== null) paintRectangle(index);
     }
 
-    function onPointerEnd() {
+    function onPointerEnd(event: PointerEvent) {
+      const pending = pendingPaintRef.current;
+      if (!pending || event.pointerId !== pending.pointerId) return;
+
+      if (!pending.activated) {
+        const next = snapshotRef.current.slice();
+        next[pending.index] = !next[pending.index];
+        setDraftSlots(next);
+      }
+
+      if (gridRef.current?.hasPointerCapture(event.pointerId)) {
+        gridRef.current.releasePointerCapture(event.pointerId);
+      }
+
       stopPainting();
     }
 
@@ -333,7 +397,13 @@ export default function AvailabilityGrid({
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
     };
-  }, [canPaint, paintRectangle, resolveIndexFromPoint, stopPainting]);
+  }, [
+    activateStroke,
+    canPaint,
+    paintRectangle,
+    resolveIndexFromPoint,
+    stopPainting,
+  ]);
 
   function startPainting(
     index: number,
@@ -343,7 +413,12 @@ export default function AvailabilityGrid({
 
     pointerEvent.preventDefault();
     pointerEvent.stopPropagation();
-    beginPaint(index, pointerEvent.pointerId);
+    beginPaint(
+      index,
+      pointerEvent.pointerId,
+      pointerEvent.clientX,
+      pointerEvent.clientY,
+    );
   }
 
   function slotTooltipDetail(index: number) {
@@ -454,6 +529,7 @@ export default function AvailabilityGrid({
       }
 
       setDraftSlots(data.slots);
+      lastSyncedSlotsRef.current = `${data.id}:${grid.totalSlots}:${JSON.stringify(data.slots)}`;
       setMode("group");
       setSaveNotice("success");
       setSaveMessage("");

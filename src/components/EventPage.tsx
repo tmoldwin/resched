@@ -174,7 +174,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
       id: "draft",
       name: displayName,
       slots: [],
-      updatedAt: new Date().toISOString(),
+      updatedAt: "",
     };
   }, [event, identity.name, name, participantId]);
 
