@@ -24,6 +24,17 @@ type EventPageProps = {
 
 const DRAFT_SLOTS: boolean[] = [];
 
+function isMobileViewport() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
+function hasSavedParticipantResponse(
+  participant: ParticipantResponse | null | undefined,
+) {
+  return Boolean(participant && participant.id !== "draft");
+}
+
 export default function EventPage({ slug, initialView = "edit" }: EventPageProps) {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
@@ -190,6 +201,13 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
       config: event.scheduleConfig,
     });
   }, [event]);
+
+  const gridInitialMode = useMemo((): "edit" | "group" => {
+    if (initialView === "group") return "group";
+    if (!clientReady || !isMobileViewport()) return "edit";
+    if (hasSavedParticipantResponse(activeParticipant)) return "group";
+    return "edit";
+  }, [activeParticipant, clientReady, initialView]);
 
   function handleSaved(participant: ParticipantResponse & { editToken: string }) {
     const sessionData: StoredSession = {
@@ -384,7 +402,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
         password={event.locked ? storedPassword || passwordInput : null}
         onSaved={handleSaved}
         onPasswordRejected={handlePasswordRejected}
-        initialMode={initialView}
+        initialMode={gridInitialMode}
       />
     </div>
   );
