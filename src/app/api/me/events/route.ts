@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { getSessionUserId } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, participants } from "@/lib/db/schema";
+import { todayString } from "@/lib/dates";
 import type { UserEventsResponse } from "@/lib/types";
 
 export async function GET() {
@@ -13,6 +14,8 @@ export async function GET() {
     }
 
     const db = getDb();
+
+    const today = todayString();
 
     const createdRows = await db
       .select({
@@ -27,6 +30,25 @@ export async function GET() {
       .where(eq(events.creatorId, userId))
       .orderBy(sql`${events.createdAt} desc`);
 
+    const pastAttendingRows = await db
+      .select({
+        participantId: participants.id,
+      })
+      .from(participants)
+      .innerJoin(events, eq(participants.eventId, events.id))
+      .where(and(eq(participants.userId, userId), lt(events.endDate, today)));
+
+    if (pastAttendingRows.length > 0) {
+      await db
+        .delete(participants)
+        .where(
+          inArray(
+            participants.id,
+            pastAttendingRows.map((row) => row.participantId),
+          ),
+        );
+    }
+
     const attendingRows = await db
       .select({
         id: events.id,
@@ -38,7 +60,7 @@ export async function GET() {
       })
       .from(participants)
       .innerJoin(events, eq(participants.eventId, events.id))
-      .where(eq(participants.userId, userId))
+      .where(and(eq(participants.userId, userId), gte(events.endDate, today)))
       .orderBy(sql`${participants.updatedAt} desc`);
 
     const allEventIds = [
@@ -65,16 +87,30 @@ export async function GET() {
     }
 
     const payload: UserEventsResponse = {
-      created: createdRows.map((row) => ({
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-        startDate: row.startDate,
-        endDate: row.endDate,
-        role: "creator" as const,
-        participantCount: counts.get(row.id) ?? 0,
-        updatedAt: row.updatedAt.toISOString(),
-      })),
+      createdUpcoming: createdRows
+        .filter((row) => row.endDate >= today)
+        .map((row) => ({
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          role: "creator" as const,
+          participantCount: counts.get(row.id) ?? 0,
+          updatedAt: row.updatedAt.toISOString(),
+        })),
+      createdArchived: createdRows
+        .filter((row) => row.endDate < today)
+        .map((row) => ({
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          role: "creator" as const,
+          participantCount: counts.get(row.id) ?? 0,
+          updatedAt: row.updatedAt.toISOString(),
+        })),
       attending: attendingRows.map((row) => ({
         id: row.id,
         slug: row.slug,

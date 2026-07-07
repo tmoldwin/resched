@@ -13,10 +13,12 @@ function CreatedEventRow({
   event,
   onDelete,
   deletingSlug,
+  deleteLabel = "Delete",
 }: {
   event: UserEventSummary;
   onDelete: (slug: string) => void;
   deletingSlug: string | null;
+  deleteLabel?: string;
 }) {
   const router = useRouter();
 
@@ -51,14 +53,22 @@ function CreatedEventRow({
           disabled={deletingSlug === event.slug}
           className="btn-danger"
         >
-          {deletingSlug === event.slug ? "Deleting…" : "Delete"}
+          {deletingSlug === event.slug ? "Deleting…" : deleteLabel}
         </button>
       </div>
     </div>
   );
 }
 
-function AttendingEventRow({ event }: { event: UserEventSummary }) {
+function AttendingEventRow({
+  event,
+  onDelete,
+  deletingSlug,
+}: {
+  event: UserEventSummary;
+  onDelete: (slug: string) => void;
+  deletingSlug: string | null;
+}) {
   return (
     <div className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -80,6 +90,14 @@ function AttendingEventRow({ event }: { event: UserEventSummary }) {
         <Link href={`/e/${event.slug}?view=responses`} className="btn-secondary">
           View responses
         </Link>
+        <button
+          type="button"
+          onClick={() => onDelete(event.slug)}
+          disabled={deletingSlug === event.slug}
+          className="btn-danger"
+        >
+          {deletingSlug === event.slug ? "Deleting…" : "Delete"}
+        </button>
       </div>
     </div>
   );
@@ -92,13 +110,15 @@ function EventSection({
   variant,
   onDelete,
   deletingSlug,
+  deleteLabel,
 }: {
   title: string;
   events: UserEventSummary[];
   emptyMessage: string;
-  variant: "created" | "attending";
+  variant: "created" | "attending" | "archived";
   onDelete?: (slug: string) => void;
   deletingSlug?: string | null;
+  deleteLabel?: string;
 }) {
   if (events.length === 0) {
     return (
@@ -114,15 +134,21 @@ function EventSection({
       <h2 className="section-label">{title}</h2>
       <div className="space-y-3">
         {events.map((event) =>
-          variant === "created" ? (
+          variant === "created" || variant === "archived" ? (
             <CreatedEventRow
               key={`${event.role}-${event.id}`}
               event={event}
               onDelete={onDelete!}
               deletingSlug={deletingSlug ?? null}
+              deleteLabel={deleteLabel}
             />
           ) : (
-            <AttendingEventRow key={`${event.role}-${event.id}`} event={event} />
+            <AttendingEventRow
+              key={`${event.role}-${event.id}`}
+              event={event}
+              onDelete={onDelete!}
+              deletingSlug={deletingSlug ?? null}
+            />
           ),
         )}
       </div>
@@ -167,11 +193,17 @@ export default function EventsDashboard() {
   }, [loadEvents]);
 
   async function deleteEvent(slug: string) {
-    const event = data?.created.find((item) => item.slug === slug);
+    const createdEvent =
+      data?.createdUpcoming.find((item) => item.slug === slug) ??
+      data?.createdArchived.find((item) => item.slug === slug);
+    const attendingEvent = data?.attending.find((item) => item.slug === slug);
+    const event = createdEvent ?? attendingEvent;
     if (!event) return;
 
     const confirmed = window.confirm(
-      `Delete "${event.name}"? This removes all responses and cannot be undone.`,
+      event.role === "creator"
+        ? `Delete "${event.name}"? This removes the entire event and all responses.`
+        : `Delete "${event.name}" from your events? Your saved responses will be erased, but the event will stay for everyone else.`,
     );
     if (!confirmed) return;
 
@@ -186,7 +218,9 @@ export default function EventsDashboard() {
         throw new Error(payload.error || "Could not delete event.");
       }
 
-      unmarkLocallyCreated(slug);
+      if (createdEvent) {
+        unmarkLocallyCreated(slug);
+      }
       await loadEvents();
     } catch (deleteError) {
       setError(
@@ -207,7 +241,7 @@ export default function EventsDashboard() {
 
       <EventSection
         title="Created by you"
-        events={data?.created ?? []}
+        events={data?.createdUpcoming ?? []}
         emptyMessage="You haven't created any events yet."
         variant="created"
         onDelete={deleteEvent}
@@ -215,10 +249,22 @@ export default function EventsDashboard() {
       />
 
       <EventSection
+        title="Archive"
+        events={data?.createdArchived ?? []}
+        emptyMessage="Past events you created will appear here for cloning."
+        variant="archived"
+        onDelete={deleteEvent}
+        deletingSlug={deletingSlug}
+        deleteLabel="Delete forever"
+      />
+
+      <EventSection
         title="Attending"
         events={data?.attending ?? []}
         emptyMessage="You haven't joined any events yet."
         variant="attending"
+        onDelete={deleteEvent}
+        deletingSlug={deletingSlug}
       />
     </div>
   );

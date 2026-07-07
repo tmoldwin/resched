@@ -59,6 +59,7 @@ export type UserEventSummary = {
 };
 
 export type UserEventsResponse = {
-  created: UserEventSummary[];
+  createdUpcoming: UserEventSummary[];
+  createdArchived: UserEventSummary[];
   attending: UserEventSummary[];
 };

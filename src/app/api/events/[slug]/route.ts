@@ -86,26 +86,47 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
 
-    if (!event.id || event.creatorId !== userId) {
-      return NextResponse.json({ error: "Only the creator can delete this event." }, { status: 403 });
+    if (!event.id) {
+      return NextResponse.json({ error: "Invalid event." }, { status: 400 });
     }
 
-    const deleted = await getDb()
-      .delete(events)
+    if (event.creatorId === userId) {
+      const deleted = await getDb()
+        .delete(events)
+        .where(
+          and(
+            eq(events.id, event.id),
+            eq(events.slug, slug),
+            eq(events.creatorId, userId),
+          ),
+        )
+        .returning({ id: events.id });
+
+      if (deleted.length !== 1) {
+        return NextResponse.json({ error: "Could not delete event." }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true, deleted: "event" });
+    }
+
+    const removed = await getDb()
+      .delete(participants)
       .where(
         and(
-          eq(events.id, event.id),
-          eq(events.slug, slug),
-          eq(events.creatorId, userId),
+          eq(participants.eventId, event.id),
+          eq(participants.userId, userId),
         ),
       )
-      .returning({ id: events.id });
+      .returning({ id: participants.id });
 
-    if (deleted.length !== 1) {
-      return NextResponse.json({ error: "Could not delete event." }, { status: 500 });
+    if (removed.length !== 1) {
+      return NextResponse.json(
+        { error: "You do not have a saved response for this event." },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, deleted: "response" });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Could not delete event." }, { status: 500 });
