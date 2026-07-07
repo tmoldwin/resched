@@ -111,6 +111,7 @@ function EventSection({
   onDelete,
   deletingSlug,
   deleteLabel,
+  hideTitle = false,
 }: {
   title: string;
   events: UserEventSummary[];
@@ -119,11 +120,12 @@ function EventSection({
   onDelete?: (slug: string) => void;
   deletingSlug?: string | null;
   deleteLabel?: string;
+  hideTitle?: boolean;
 }) {
   if (events.length === 0) {
     return (
       <section className="space-y-3">
-        <h2 className="section-label">{title}</h2>
+        {hideTitle ? null : <h2 className="section-label">{title}</h2>}
         <p className="text-sm text-zinc-500">{emptyMessage}</p>
       </section>
     );
@@ -131,7 +133,7 @@ function EventSection({
 
   return (
     <section className="space-y-3">
-      <h2 className="section-label">{title}</h2>
+      {hideTitle ? null : <h2 className="section-label">{title}</h2>}
       <div className="space-y-3">
         {events.map((event) =>
           variant === "created" || variant === "archived" ? (
@@ -161,6 +163,7 @@ export default function EventsDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -249,16 +252,6 @@ export default function EventsDashboard() {
       />
 
       <EventSection
-        title="Archive"
-        events={data?.createdArchived ?? []}
-        emptyMessage="Past events you created will appear here for cloning."
-        variant="archived"
-        onDelete={deleteEvent}
-        deletingSlug={deletingSlug}
-        deleteLabel="Delete forever"
-      />
-
-      <EventSection
         title="Attending"
         events={data?.attending ?? []}
         emptyMessage="You haven't joined any events yet."
@@ -266,6 +259,38 @@ export default function EventsDashboard() {
         onDelete={deleteEvent}
         deletingSlug={deletingSlug}
       />
+
+      <section className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setArchiveOpen((open) => !open)}
+          className="flex w-full items-center justify-between text-left"
+          aria-expanded={archiveOpen}
+        >
+          <span className="section-label">Archive</span>
+          <span
+            className={`text-sm text-zinc-500 transition-transform ${
+              archiveOpen ? "rotate-180" : ""
+            }`}
+            aria-hidden
+          >
+            v
+          </span>
+        </button>
+
+        {archiveOpen ? (
+          <EventSection
+            title="Archive"
+            events={data?.createdArchived ?? []}
+            emptyMessage="Past events you created will appear here for cloning."
+            variant="archived"
+            onDelete={deleteEvent}
+            deletingSlug={deletingSlug}
+            deleteLabel="Delete forever"
+            hideTitle
+          />
+        ) : null}
+      </section>
     </div>
   );
 }
