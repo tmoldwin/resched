@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, Source_Sans_3, Syne } from "next/font/google";
 import Link from "next/link";
 import AuthHeader from "@/components/AuthHeader";
 import Logo from "@/components/Logo";
 import SessionProvider from "@/components/SessionProvider";
 import "./globals.css";
 
-const sans = Plus_Jakarta_Sans({
+const sans = Source_Sans_3({
   variable: "--font-sans-family",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
-const brand = Space_Grotesk({
+const brand = Syne({
   variable: "--font-brand-family",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["500", "600", "700", "800"],
 });
 
 const mono = IBM_Plex_Mono({

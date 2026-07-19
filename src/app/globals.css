@@ -143,15 +143,15 @@ body {
   }
 
   .page-title {
-    @apply font-brand text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl;
+    @apply font-brand text-2xl font-semibold tracking-[-0.02em] text-zinc-900 sm:text-3xl;
   }
 
   .page-lead {
-    @apply text-base leading-7 text-zinc-600;
+    @apply text-[1.05rem] leading-7 text-zinc-600;
   }
 
   .section-label {
-    @apply font-brand text-xs font-medium uppercase tracking-[0.08em] text-zinc-500;
+    @apply font-brand text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-zinc-500;
   }
 
   .card {

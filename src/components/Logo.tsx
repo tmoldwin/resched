@@ -40,7 +40,7 @@ export default function Logo({ className = "", showWordmark = true }: LogoProps)
         <path d="M13.8 25.9 10.2 24.0 13.8 22.1Z" fill="#ffffff" />
       </svg>
       {showWordmark ? (
-        <span className="font-brand text-[1.05rem] font-semibold tracking-[-0.03em] text-zinc-900">
+        <span className="font-brand text-[1.15rem] font-bold tracking-[-0.04em] text-zinc-900">
           Resched
         </span>
       ) : null}
