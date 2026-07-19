@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — resched",
-  description: "Terms and conditions for using resched.",
+  title: "Terms of Service — Resched",
+  description: "Terms and conditions for using Resched.",
 };
 
 export default function TermsPage() {

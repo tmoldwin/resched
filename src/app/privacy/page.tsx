@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — resched",
-  description: "How resched collects, uses, and protects your information.",
+  title: "Privacy Policy — Resched",
+  description: "How Resched collects, uses, and protects your information.",
 };
 
 export default function PrivacyPage() {

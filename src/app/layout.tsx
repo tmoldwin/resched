@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import Link from "next/link";
 import AuthHeader from "@/components/AuthHeader";
 import Logo from "@/components/Logo";
@@ -16,8 +16,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const brand = Space_Grotesk({
+  variable: "--font-brand-family",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
 export const metadata: Metadata = {
-  title: "resched",
+  title: "Resched",
   description: "Find a time that works for everyone.",
 };
 
@@ -29,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${brand.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-white text-zinc-900">
         <SessionProvider>
