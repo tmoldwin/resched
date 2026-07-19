@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import AuthHeader from "@/components/AuthHeader";
+import Logo from "@/components/Logo";
 import SessionProvider from "@/components/SessionProvider";
 import "./globals.css";
 
@@ -34,8 +35,8 @@ export default function RootLayout({
         <SessionProvider>
           <header className="border-b border-zinc-200">
             <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-              <Link href="/" className="text-base font-semibold tracking-tight">
-                resched
+              <Link href="/" className="transition hover:opacity-90">
+                <Logo />
               </Link>
               <AuthHeader />
             </div>
