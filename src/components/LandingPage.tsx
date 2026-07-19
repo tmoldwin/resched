@@ -26,7 +26,7 @@ export default function LandingPage({ session }: LandingPageProps) {
         <EventsDashboard />
 
         <section className="flex flex-col gap-4 border-t border-zinc-200 pt-8 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold text-zinc-900">Create a new event</h2>
+          <h2 className="font-brand text-lg font-semibold text-zinc-900">Create a new event</h2>
           <Link href="/new" className="btn-primary w-full sm:w-auto sm:min-w-44">
             New event
           </Link>

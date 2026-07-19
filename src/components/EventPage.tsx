@@ -327,7 +327,7 @@ export default function EventPage({ slug, initialView = "edit" }: EventPageProps
       <div className="page-shell flex min-h-[50vh] items-center justify-center">
         <div className="card w-full max-w-md space-y-5">
           <div>
-            <h1 className="text-xl font-semibold">{event.name}</h1>
+            <h1 className="font-brand text-xl font-semibold">{event.name}</h1>
             <p className="mt-1 text-sm text-zinc-500">Enter the event password to continue</p>
           </div>
           <input

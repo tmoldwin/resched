@@ -1,25 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
 import Link from "next/link";
 import AuthHeader from "@/components/AuthHeader";
 import Logo from "@/components/Logo";
 import SessionProvider from "@/components/SessionProvider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const sans = Plus_Jakarta_Sans({
+  variable: "--font-sans-family",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const brand = Space_Grotesk({
   variable: "--font-brand-family",
   subsets: ["latin"],
   weight: ["500", "600", "700"],
+});
+
+const mono = IBM_Plex_Mono({
+  variable: "--font-mono-family",
+  subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -35,9 +37,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${brand.variable} h-full antialiased`}
+      className={`${sans.variable} ${brand.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-white text-zinc-900">
+      <body className="flex min-h-full flex-col bg-white font-sans text-zinc-900">
         <SessionProvider>
           <header className="border-b border-zinc-200">
             <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">

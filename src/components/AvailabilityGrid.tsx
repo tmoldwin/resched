@@ -665,7 +665,7 @@ export default function AvailabilityGrid({
               style={{ gridTemplateColumns: columnTemplate }}
             >
               <div
-                className="flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
+                className="flex h-7 items-center justify-end border-r border-zinc-300 bg-white px-1 font-mono text-[10px] tabular-nums whitespace-nowrap text-zinc-600 sm:h-8 sm:text-[11px]"
                 style={{ borderTop: `1px solid ${lineColor}` }}
               >
                 {timeLabel}
